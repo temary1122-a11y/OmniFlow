@@ -349,22 +349,9 @@ export class ModelRouter {
     forcedSelection?: ModelSelection
   ): Promise<LLMResponse> {
     const keys = Object.keys(apiKeys).length ? apiKeys : this.apiKeys;
-    console.log('[ModelRouter] call invoked:', {
-      agentRole: request.agentRole,
-      phase: request.phase,
-      passedApiKeysCount: Object.keys(apiKeys).length,
-      internalApiKeysCount: Object.keys(this.apiKeys).length,
-      usingKeys: Object.keys(apiKeys).length ? 'passed' : 'internal',
-      availableProviders: Object.keys(keys),
-      forceProvider: forceProvider || 'none',
-      toolsProvided: Boolean(tools && tools.length),
-    });
+    console.log('[ModelRouter] call', request.agentRole, request.phase, 'tools=' + Boolean(tools && tools.length));
     const selection = this.route(request, keys, prompt, forceProvider, forcedSelection);
-    console.log('[ModelRouter] route result:', {
-      selectedProvider: selection.provider,
-      selectedModel: selection.modelId,
-      hasKeyForSelected: Boolean(keys[selection.provider]),
-    });
+    console.log('[ModelRouter] routed', selection.provider, selection.modelId);
     
     // Rate limiting check
     await this.waitForRateLimit(selection.provider);

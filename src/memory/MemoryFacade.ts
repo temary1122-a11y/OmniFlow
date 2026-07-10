@@ -15,6 +15,8 @@ import { HierarchicalMemory, HierarchicalMemoryConfig } from './HierarchicalMemo
 import type { EpisodeType, Episode, SearchResult } from './EpisodicMemory';
 import type { Skill, SkillMatch } from './ProceduralMemory';
 import type { KnowledgeNode } from './SemanticMemory';
+import * as fs from 'fs';
+import * as path from 'path';
 
 export interface MemoryFacadeConfig extends HierarchicalMemoryConfig {
   /** Minimum importance threshold for recordEpisode (episodes below are skipped). Default: 0 */
@@ -32,8 +34,11 @@ export class MemoryFacade {
   private importanceThreshold: number;
   private maxPromptMemoryChars: number;
   private topN: number;
+  private workspaceRoot: string;
+  private flushTimer: ReturnType<typeof setTimeout> | null = null;
 
-  private constructor(config?: MemoryFacadeConfig) {
+  private constructor(config?: MemoryFacadeConfig, workspaceRoot?: string) {
+    this.workspaceRoot = workspaceRoot || '';
     this.memory = new HierarchicalMemory({
       episodicHalfLifeMs: config?.episodicHalfLifeMs,
       retrievalLimit: config?.retrievalLimit ?? 10,
@@ -53,7 +58,9 @@ export class MemoryFacade {
    */
   static getInstance(workspaceRoot: string, config?: MemoryFacadeConfig): MemoryFacade {
     if (!MemoryFacade.instances.has(workspaceRoot)) {
-      MemoryFacade.instances.set(workspaceRoot, new MemoryFacade(config));
+      const inst = new MemoryFacade(config, workspaceRoot);
+      MemoryFacade.instances.set(workspaceRoot, inst);
+      inst.loadFromDisk();
     }
     return MemoryFacade.instances.get(workspaceRoot)!;
   }
@@ -219,5 +226,70 @@ export class MemoryFacade {
   /** Expose underlying HierarchicalMemory for advanced use-cases. */
   getRawMemory(): HierarchicalMemory {
     return this.memory;
+  }
+
+  private getMemoryDir(): string {
+    if (!this.workspaceRoot) return '';
+    return path.join(this.workspaceRoot, '.omniflow', 'memory');
+  }
+
+  /** Debounced flush to avoid blocking the event loop. */
+  flushToDisk(immediate = false): void {
+    if (!this.workspaceRoot) return;
+    if (this.flushTimer) clearTimeout(this.flushTimer);
+    const doFlush = () => {
+      try {
+        const dir = this.getMemoryDir();
+        fs.mkdirSync(dir, { recursive: true });
+        const eps = this.memory.episodicMemory.getAll();
+        const lines = eps.map((ep) => JSON.stringify({
+          id: ep.id,
+          timestamp: ep.timestamp,
+          type: ep.type,
+          data: ep.data,
+          importance: ep.importance,
+          embedding: ep.embedding,
+        }));
+        fs.writeFileSync(path.join(dir, 'episodes.jsonl'), lines.join('\n'), 'utf-8');
+        fs.writeFileSync(path.join(dir, 'skills.json'), JSON.stringify(this.memory.proceduralMemory.getAllSkills(), null, 2), 'utf-8');
+        const semanticNodes = this.memory.semanticMemory.getAllNodes();
+        fs.writeFileSync(path.join(dir, 'semantic-nodes.json'), JSON.stringify(semanticNodes, null, 2), 'utf-8');
+        fs.writeFileSync(path.join(dir, 'meta.json'), JSON.stringify({ version: 1, updatedAt: Date.now() }, null, 2), 'utf-8');
+      } catch {
+        // best-effort persistence
+      }
+    };
+    if (immediate) {
+      doFlush();
+    } else {
+      this.flushTimer = setTimeout(doFlush, 2000);
+    }
+  }
+
+  /** Load memory state from disk if present. No-op if no workspaceRoot or missing files. */
+  loadFromDisk(): void {
+    if (!this.workspaceRoot) return;
+    const dir = this.getMemoryDir();
+    try {
+      const epsPath = path.join(dir, 'episodes.jsonl');
+      if (fs.existsSync(epsPath)) {
+        const content = fs.readFileSync(epsPath, 'utf-8');
+        for (const line of content.split('\n').filter(Boolean)) {
+          try {
+            const ep = JSON.parse(line) as Episode;
+            this.memory.episodicMemory.addPersisted(ep);
+          } catch { /* skip corrupt lines */ }
+        }
+      }
+      const skillsPath = path.join(dir, 'skills.json');
+      if (fs.existsSync(skillsPath)) {
+        const skills = JSON.parse(fs.readFileSync(skillsPath, 'utf-8')) as any[];
+        for (const s of skills) {
+          try { this.memory.proceduralMemory.importSkill(s); } catch { /* skip */ }
+        }
+      }
+    } catch {
+      // best-effort load
+    }
   }
 }

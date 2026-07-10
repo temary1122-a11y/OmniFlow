@@ -12,21 +12,52 @@ export interface OmniConfig {
   orchestratorModel: string;
   roleModels: Partial<Record<AgentRole, string>>;
   useSupervisor: boolean;
+  /** When true, the AuditAgent may call an LLM for advisory code-quality review (default false). */
+  llmAudit: boolean;
+  /** When true, the SecurityAgent may call an LLM for contextual security review (default false). */
+  llmSecurity: boolean;
 }
 
 export class ConfigManager {
+  private static secretStorage: vscode.SecretStorage | null = null;
+  private static secretCache: Record<string, string> = {};
+
+  static initSecretStorage(secrets: vscode.SecretStorage): void {
+    ConfigManager.secretStorage = secrets;
+  }
+
+  static async preloadSecrets(): Promise<void> {
+    if (!ConfigManager.secretStorage) return;
+    const keys = ['openrouterApiKey', 'kiloGatewayApiKey', 'codikApiKey'] as const;
+    for (const key of keys) {
+      const val = await ConfigManager.secretStorage.get(`omni.${key}`);
+      if (val) ConfigManager.secretCache[key] = val;
+    }
+  }
+
+  private static getCachedSecret(key: string): string | undefined {
+    return ConfigManager.secretCache[key];
+  }
+
   static load(): OmniConfig {
     const cfg = vscode.workspace.getConfiguration('omni');
+    const getKey = (settingKey: string, cacheKey: string, envVar?: string) => {
+      const cached = ConfigManager.getCachedSecret(cacheKey);
+      if (cached) return cached;
+      return (cfg.get<string>(settingKey, '') || (envVar ? process.env[envVar] : '') || '') as string;
+    };
     return {
-      openrouterApiKey: cfg.get<string>('openrouterApiKey', '') || process.env.OPENROUTER_API_KEY || '',
-      kiloGatewayApiKey: cfg.get<string>('kiloGatewayApiKey', '') || process.env.KILO_API_KEY || '',
-      codikApiKey: cfg.get<string>('codikApiKey', '') || process.env.CODIK_API_KEY || '',
+      openrouterApiKey: getKey('openrouterApiKey', 'openrouterApiKey', 'OPENROUTER_API_KEY'),
+      kiloGatewayApiKey: getKey('kiloGatewayApiKey', 'kiloGatewayApiKey', 'KILO_API_KEY'),
+      codikApiKey: getKey('codikApiKey', 'codikApiKey', 'CODIK_API_KEY'),
       toolApiKeys: cfg.get<Record<string, string>>('toolApiKeys', {}) || {},
       preferredProvider: cfg.get<Provider>('preferredProvider', 'openrouter'),
       budget: cfg.get('budget', 'free'),
       orchestratorModel: cfg.get<string>('orchestratorModel', '') || '',
       roleModels: cfg.get<Partial<Record<AgentRole, string>>>('roleModels', {}) || {},
       useSupervisor: cfg.get<boolean>('useSupervisor', false),
+      llmAudit: cfg.get<boolean>('llmAudit', false),
+      llmSecurity: cfg.get<boolean>('llmSecurity', false),
     };
   }
 
@@ -92,6 +123,10 @@ export class ConfigManager {
       return;
     }
     await vscode.workspace.getConfiguration('omni').update(settingKey, key, vscode.ConfigurationTarget.Global);
+    if (ConfigManager.secretStorage) {
+      await ConfigManager.secretStorage.store(`omni.${settingKey}`, key);
+      ConfigManager.secretCache[settingKey] = key;
+    }
     vscode.window.showInformationMessage(`Omni: ${provider} API key saved.`);
   }
 }

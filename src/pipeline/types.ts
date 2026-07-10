@@ -21,6 +21,7 @@ import type { WorkingMemory } from '../memory/WorkingMemory';
 import type { LedgerMemory } from '../memory/LedgerMemory';
 import type { TaskCompass } from '../core/TaskCompass';
 import type { ToolManager } from '../core/ToolManager';
+import type { MemoryFacade } from '../memory/MemoryFacade';
 import type { ArtifactManager } from '../artifacts/ArtifactManager';
 import type { PromptOrchestrator } from '../core/PromptOrchestrator';
 import type { ContextAgent } from '../agents/ContextAgent';
@@ -106,6 +107,7 @@ export interface PipelineServices {
   planner: PlannerAgent;
   toolManager: ToolManager;
   memory: WorkingMemory;
+  sharedMemory?: MemoryFacade;
   taskCompass: TaskCompass;
   apiKeys: Record<string, string>;
   runCoders: (plan: ExecutionPlan, ctx: ContextPacket) => Promise<BuildArtifact[]>;
@@ -130,6 +132,10 @@ export interface PipelineHost {
   setAgent(id: AgentRole, status: AgentStatus, message?: string): void;
   transitionPhase(phase: Phase): void;
   runPhaseSafely<T>(fn: () => Promise<T>, label: string, maxRetries?: number): Promise<T>;
+  /** Throw if the user requested a stop — call before/inside long-running work. */
+  assertNotCancelled(): void;
+  /** Whether the user has requested a stop. */
+  isCancelled(): boolean;
   requestApiKeyPrompt(payload: ApiKeyPromptPayload): Promise<ApiKeyPromptResponse>;
   askClarifyingQuestions(questions: ClarifyingQuestion[]): Promise<ClarifyingAnswer[]>;
   refineGoal(goal: string, answers: ClarifyingAnswer[]): string;

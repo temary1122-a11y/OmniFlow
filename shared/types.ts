@@ -89,6 +89,8 @@ export interface ContextPacket {
   omniMd?: string;
   /** Stack chosen by the Planner for THIS task. Authoritative for the coder — overrides workspaceSnapshot.techStack. */
   plannedStack?: string[];
+  /** Memory enrichment block attached by ContextEnrichPhase. */
+  memoryContext?: string;
 }
 
 export interface ArtifactTarget {

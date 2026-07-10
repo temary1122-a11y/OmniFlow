@@ -7,6 +7,7 @@ import type {
   PipelinePhase,
   PipelineServices,
 } from '../types';
+import type { MemoryFacade } from '../../memory/MemoryFacade';
 
 export class DeliverPhase implements PipelinePhase {
   readonly id = 'deliver' as const;
@@ -67,6 +68,32 @@ export class DeliverPhase implements PipelinePhase {
 
     host.setAgent('orchestrator', 'done', 'Complete');
     const durationMs = Date.now() - started;
+
+    if (services.sharedMemory && ctx.plan) {
+      services.sharedMemory.recordEpisode(
+        'deliver',
+        { verdict: verdict.verdict, goal: ctx.refinedGoal, stack: ctx.plan.stack, artifactCount: artifacts.length, durationMs },
+        0.9
+      );
+      const stackKey = ctx.plan.stack.join('+');
+      try {
+        services.sharedMemory.registerSkill({
+          name: `stack:${stackKey}`,
+          description: ctx.refinedGoal,
+          category: 'workflow',
+          metadata: {
+            stack: ctx.plan.stack,
+            architecture: ctx.plan.architecture,
+            artifactPaths: artifacts.map((a) => a.filePath),
+          },
+        });
+      } catch { /* best-effort */ }
+    }
+
+    if (services.sharedMemory) {
+      services.sharedMemory.flushToDisk(true);
+    }
+
     host.emitPhaseLifecycle('deliver', 'completed', { taskId: ctx.taskId, durationMs });
     return { phase: 'deliver', durationMs, report };
   }

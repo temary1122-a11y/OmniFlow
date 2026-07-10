@@ -3,17 +3,20 @@ import type { HandoffContract, ArtifactManifest } from '../../shared/types';
 import { ModelRouter } from '../routing/ModelRouter';
 import type { EventBus } from '../core/EventBus';
 import { AgentRuntime } from '../core/AgentRuntime';
-import { ToolRegistry, createDefaultTools, createConsultTools, createCodeSearchTools } from '../core/ToolRegistry';
+import { ToolRegistry, createDefaultTools, createConsultTools, createCodeSearchTools, createMemoryTools } from '../core/ToolRegistry';
 import { BuiltInCodeIndex } from '../core/BuiltInCodeIndex';
 import type { ConsultFn } from '../core/AgentConsultant';
 import { formatResearchBlock } from '../core/promptUtils';
+import type { MemoryFacade } from '../memory/MemoryFacade';
 
 export class CoderAgent extends LlmAgent {
   agentId = 'coder';
   private consultFn?: ConsultFn;
+  private memory?: MemoryFacade;
 
-  constructor(router: ModelRouter, apiKeys: Record<string, string>, eventBus?: EventBus) {
+  constructor(router: ModelRouter, apiKeys: Record<string, string>, eventBus?: EventBus, memory?: MemoryFacade) {
     super('coder', router, apiKeys, eventBus);
+    this.memory = memory;
   }
 
   setConsultFn(fn: ConsultFn): void {
@@ -87,6 +90,14 @@ export class CoderAgent extends LlmAgent {
       }
     }
 
+    if (this.memory) {
+      const memTools = createMemoryTools(this.memory);
+      for (const t of memTools.tools) {
+        const executor = (memTools.executors as any)[t.name];
+        toolRegistry.register(t.name, t, executor);
+      }
+    }
+
     const bounceContext = (contract.contextPacket as { bounceContext?: { feedback?: string; failedCriteria?: string[]; previousArtifactPaths?: string[] } }).bounceContext;
     const bounceBlock = bounceContext
       ? `\n\n## Previous attempt FAILED — fix it\nFeedback: ${bounceContext.feedback || '(none)'}\nFailed criteria: ${(bounceContext.failedCriteria || []).join('; ') || '(none)'}\nPreviously written: ${(bounceContext.previousArtifactPaths || []).join(', ') || '(none)'}\nAddress the feedback above. Do not repeat the same mistake.`
@@ -127,6 +138,7 @@ You MUST write the implementation to disk using the write_file tool. Never retur
           this.emitToolResult('build', tool, result.success, result.output, result.error);
         },
         apiKeys: this.apiKeys,
+        memory: this.memory,
       }
     );
 
@@ -148,13 +160,24 @@ You MUST write the implementation to disk using the write_file tool. Never retur
       );
     }
 
-    for (let attempt = 1; attempt < 3 && manifest.artifacts.length === 0; attempt++) {
-      this.emitCommentary('build', `No artifacts produced on attempt ${attempt}, retrying (${attempt + 1}/3)`);
-      this.emitReasoning('build', `No artifacts produced on attempt ${attempt}, retrying (${attempt + 1}/3)`);
-      manifest = await runtime.run(goal + '\n\n' + insistInstruction, {
-        ...contract.contextPacket,
-        taskId: contract.subtaskId,
-      });
+    // If the first run already produced an artifact, do NOT re-run the whole goal
+    // from scratch. Re-running re-seeds identical reasoning ("The user wants me to
+    // create...") and can clobber the file with a duplicate write. Overwriting the
+    // same path once is expected; re-running the entire goal is not.
+    if (manifest.artifacts.length === 0) {
+      const nudge =
+        `Your previous attempt returned only reasoning text and did NOT call the write_file tool. ` +
+        `You MUST now call the write_file tool with the COMPLETE file content for "${target.filePath}". ` +
+        `Do not return only reasoning.`;
+
+      for (let attempt = 1; attempt < 3 && manifest.artifacts.length === 0; attempt++) {
+        this.emitCommentary('build', `No artifacts produced on attempt ${attempt}, retrying (${attempt + 1}/3)`);
+        this.emitReasoning('build', `No artifacts produced on attempt ${attempt}, retrying (${attempt + 1}/3)`);
+        manifest = await runtime.run(goal + '\n\n' + insistInstruction + '\n\n' + nudge, {
+          ...contract.contextPacket,
+          taskId: contract.subtaskId,
+        });
+      }
     }
 
     const hasRealContent =

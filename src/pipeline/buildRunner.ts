@@ -42,6 +42,22 @@ export async function runCodersParallel(
     boundary: (subtask.artifactTargets ?? []).map((t) => t.filePath),
   }));
 
+  // Dedupe parallel coders that would target the same artifact file. Two coders
+  // writing the same path causes duplicate / clobbering writes. Keep the first
+  // contract per target filePath; warn once about any removed duplicates.
+  const seenPaths = new Set<string>();
+  const deduped: HandoffContract[] = [];
+  for (const c of contracts) {
+    const p = c.artifactTargets?.[0]?.filePath;
+    if (!p || !seenPaths.has(p)) {
+      if (p) seenPaths.add(p);
+      deduped.push(c);
+    } else {
+      console.warn(`[Omni] runCodersParallel: skipping duplicate target "${p}" (keeping first)`);
+    }
+  }
+  const finalContracts = deduped.length ? deduped : contracts;
+
   if (opts.useSupervisor) {
     const executors = {
       coder: {
@@ -50,7 +66,7 @@ export async function runCodersParallel(
       },
     };
     const manifests = await opts.supervisor.orchestrate(
-      contracts,
+      finalContracts,
       ctx,
       executors,
       opts.workspaceRoot,
@@ -59,7 +75,7 @@ export async function runCodersParallel(
     return flattenCoderManifests(manifests, ctx.taskId, opts.emitArtifact);
   }
 
-  const batches = scheduleContracts(opts.workspaceRoot, contracts);
+  const batches = scheduleContracts(opts.workspaceRoot, finalContracts);
   const allArtifacts: BuildArtifact[] = [];
   for (const batch of batches) {
     const results = await Promise.all(

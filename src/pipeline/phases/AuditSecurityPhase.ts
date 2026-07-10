@@ -73,6 +73,16 @@ export class AuditSecurityPhase implements PipelinePhase {
             const r = JSON.parse(secManifest.artifacts[0].content);
             services.memory.setSecurityReport(r);
             host.setAgent('security', r.passed ? 'done' : 'blocked', r.passed ? 'Clean' : 'Issues found');
+            if (services.sharedMemory) {
+              const highCount = (r.findings || []).filter((f: any) => f.severity === 'high').length;
+              if (highCount > 0) {
+                services.sharedMemory.recordEpisode(
+                  'security',
+                  { taskId: ctx.taskId, findingCount: (r.findings || []).length, highCount, files: (r.findings || []).filter((f: any) => f.severity === 'high').map((f: any) => f.file) },
+                  0.9
+                );
+              }
+            }
           })
       : Promise.resolve();
 

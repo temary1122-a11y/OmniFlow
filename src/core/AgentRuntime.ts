@@ -1,6 +1,7 @@
 import { EventBus } from './EventBus';
 import { ToolRegistry, ToolDefinition, ToolContext, ToolResult } from './ToolRegistry';
 import { ModelRouter } from '../routing/ModelRouter';
+import type { LLMResponse } from '../routing/LLMClient';
 import { TaskCompass } from './TaskCompass';
 import { MemoryFacade } from '../memory/MemoryFacade';
 import { ContextGovernor } from './ContextGovernor';
@@ -517,8 +518,9 @@ export class AgentRuntime {
   }
 
   private async callLLM(prompt: string, tools?: any[]): Promise<any> {
+    let response: LLMResponse;
     try {
-      const response = await this.modelRouter.call(
+      response = await this.modelRouter.call(
         { phase: 'build', agentRole: this.options.agentId as any, complexity: 'medium' },
         prompt,
         this.options.systemPrompt,
@@ -526,16 +528,6 @@ export class AgentRuntime {
         undefined,
         tools
       );
-
-      if (!response.content && response.reasoning) {
-        response.content = response.reasoning;
-      }
-
-      return {
-        content: response.content,
-        reasoning: response.reasoning,
-        toolCalls: response.toolCalls ?? [],
-      };
     } catch (error: any) {
       console.error(`AgentRuntime [${this.options.agentId}] LLM call failed:`, error.message);
       return {
@@ -544,6 +536,23 @@ export class AgentRuntime {
         toolCalls: [],
       };
     }
+
+    if (response.usedFallback && this.options.agentId === 'coder') {
+      throw new Error(
+        'CoderAgent: LLM providers unavailable — cannot generate code offline. ' +
+        'Fix: set a working API key / provider in Omni settings and retry.'
+      );
+    }
+
+    if (!response.content && response.reasoning) {
+      response.content = response.reasoning;
+    }
+
+    return {
+      content: response.content,
+      reasoning: response.reasoning,
+      toolCalls: response.toolCalls ?? [],
+    };
   }
 
   private buildUserMessage(goal: string, context: ContextPacket): string {

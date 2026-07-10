@@ -133,11 +133,22 @@ export class EpisodicMemory {
   add(episode: Omit<Episode, 'id' | 'timestamp' | 'embedding'>): Episode {
     const id = `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
     const timestamp = Date.now();
-    const text = JSON.stringify(episode.data);
+    // Embed a searchable text so natural-language queries recall the episode:
+    // prefer a human-readable `excerpt` (what AgentRuntime actually records) and
+    // ALSO include the raw JSON so structured fields stay retrievable. Embedding
+    // the bare JSON previously made recall fail for prose queries (leaky data path).
+    const excerpt = typeof episode.data.excerpt === 'string' && episode.data.excerpt.trim()
+      ? episode.data.excerpt
+      : '';
+    const text = (excerpt ? excerpt + ' ' : '') + JSON.stringify(episode.data);
     const embedding = this.embeddingModel.embed(text);
     const full: Episode = { ...episode, id, timestamp, embedding };
     this.episodes.set(id, full);
     return full;
+  }
+
+  addPersisted(episode: Episode): void {
+    this.episodes.set(episode.id, episode);
   }
 
   get(id: string): Episode | undefined {

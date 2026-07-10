@@ -95,10 +95,7 @@ export class ResilientModelRouter extends ModelRouter {
 
           const router = this.fallbackRouters.get(selection.provider) ?? this.primaryRouter;
 
-          console.log('[ResilientModelRouter] Attempting (chain):', {
-            provider: selection.provider,
-            model: selection.modelId,
-          });
+          console.log('[ResilientModelRouter] chain attempt', selection.provider, selection.modelId);
 
           try {
             const startTime = Date.now();
@@ -166,11 +163,7 @@ export class ResilientModelRouter extends ModelRouter {
           const selection = router.route(request, apiKeys, prompt, provider);
           const status = this.health.getStatus(selection.provider, selection.modelId);
 
-          console.log('[ResilientModelRouter] Attempting provider:', {
-            provider,
-            selectedProvider: selection.provider,
-            hasKey: hasProviderKey(selection.provider, apiKeys),
-          });
+          console.log('[ResilientModelRouter] provider attempt', provider, selection.provider);
 
           if (!this.health.canAttempt(selection.provider, selection.modelId)) {
             this.eventBus.emit({

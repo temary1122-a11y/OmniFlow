@@ -74,6 +74,14 @@ export class VerifyPhase implements PipelinePhase {
     const decision = verdict.decision ?? (verdict.verdict === 'PASS' ? 'ACCEPT' : 'REJECT');
     let loopDecision: VerifyPhaseOutcome['decision'] = 'accept';
 
+    if (services.sharedMemory) {
+      services.sharedMemory.recordEpisode(
+        'verification',
+        { verdict: verdict.verdict, decision, subtaskId: verifyContract.subtaskId, failedCriteria: verdict.failedCriteria },
+        verdict.verdict === 'FAIL' ? 0.85 : 0.4
+      );
+    }
+
     if (decision === 'REJECT') {
       loopDecision = 'reject';
     } else if (decision === 'ESCALATE') {

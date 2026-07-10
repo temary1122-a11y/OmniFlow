@@ -1,7 +1,7 @@
 import type { PipelineContext, PipelineHost, PipelinePhase, PipelineServices, PhaseOutcome } from '../types';
 
 export class ContextEnrichPhase implements PipelinePhase {
-  readonly id = 'build' as const;
+  readonly id = 'context-enrich' as const;
 
   canRun(ctx: PipelineContext): boolean {
     return Boolean(ctx.contextPacket);
@@ -17,6 +17,13 @@ export class ContextEnrichPhase implements PipelinePhase {
     host.emitPhaseLifecycle('context-enrich', 'started', { taskId: ctx.taskId });
 
     const enrichment = await services.contextAgent.enrich(ctx.refinedGoal, ctx.contextPacket);
+    if (enrichment.memoryContext && ctx.contextPacket) {
+      ctx.contextPacket = {
+        ...ctx.contextPacket,
+        memoryContext: enrichment.memoryContext,
+      };
+      services.memory.setContextPacket(ctx.contextPacket);
+    }
     if (enrichment.memoryContext) {
       host.chat(
         'system',

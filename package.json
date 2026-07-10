@@ -134,6 +134,18 @@
           "default": false,
           "description": "Use AgentSupervisor for parallel coder orchestration (retry, fallback, policy-driven scheduling).",
           "order": 8
+        },
+        "omni.llmSecurity": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable LLM-assisted security review on top of regex/static scanning (advisory; never overrides heuristic secret detection).",
+          "order": 9
+        },
+        "omni.llmAudit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable LLM-assisted code-quality audit (advisory; soft NEEDS_REVIEW only, never hard FAIL).",
+          "order": 10
         }
       }
     },
@@ -154,7 +166,7 @@
           "name": "Cockpit"
         }
       ]
-    },
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run build",
@@ -169,15 +181,7 @@
   },
   "dependencies": {
     "@cline/sdk": "^0.0.54",
-    "dockerode": "^4.0.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "reactflow": "^11.11.4",
-    "react-virtuoso": "^4.12.3",
-    "zustand": "^4.5.5",
-    "lucide-react": "^0.468.0",
-    "clsx": "^2.1.1",
-    "tailwind-merge": "^2.6.0"
+    "dockerode": "^4.0.2"
   },
   "devDependencies": {
     "@types/dockerode": "^3.3.0",

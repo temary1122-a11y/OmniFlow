@@ -60,7 +60,6 @@ function DiffBlock({ filePath, diff }: { filePath: string; diff: string }) {
       <button
         type="button"
         onClick={() => openArtifact(filePath)}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openArtifact(filePath); } }}
         style={{
           display: 'block',
           width: '100%',

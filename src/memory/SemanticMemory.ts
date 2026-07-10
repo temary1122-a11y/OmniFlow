@@ -376,6 +376,10 @@ export class SemanticMemory {
     }
   }
 
+  getAllNodes(): KnowledgeNode[] {
+    return Array.from(this.nodes.values());
+  }
+
   getStats(): {
     totalNodes: number;
     totalEdges: number;

@@ -144,6 +144,7 @@ export class OmniOrchestrator {
   private runtimeEdges: AgentGraphEdge[] = [];
   private cancelRequested = false;
   private isRunning = false;
+  private static activeInstance: OmniOrchestrator | null = null;
   private startTime = 0;
   private questionResolver: QuestionResolver | null = null;
   private pendingQuestions: ClarifyingQuestion[] = [];
@@ -237,9 +238,9 @@ export class OmniOrchestrator {
     this.clarifier = new ClarifierAgent(this.resilientRouter, this.apiKeys, this.eventBus);
     this.researcher = new ResearchAgent(this.resilientRouter, this.apiKeys, this.eventBus);
     this.planner = new PlannerAgent(this.resilientRouter, this.apiKeys, this.eventBus);
-    this.coder = new CoderAgent(this.resilientRouter, this.apiKeys, this.eventBus);
-    this.auditor = new AuditAgent();
-    this.security = new SecurityAgent();
+    this.coder = new CoderAgent(this.resilientRouter, this.apiKeys, this.eventBus, this.sharedMemory);
+    this.auditor = new AuditAgent(this.resilientRouter, this.apiKeys, this.eventBus, config.llmAudit);
+    this.security = new SecurityAgent(this.resilientRouter, this.apiKeys, this.eventBus, config.llmSecurity);
     this.verifier = new VerificationAgent(this.resilientRouter, this.apiKeys, this.eventBus);
 
     this.wireAgentInfrastructure();
@@ -308,6 +309,8 @@ export class OmniOrchestrator {
       setAgent: (id, status, message) => this.setAgent(id, status, message),
       transitionPhase: (phase) => this.phaseEngine.transitionTo(phase),
       runPhaseSafely: (fn, label, maxRetries) => this.runPhaseSafely(fn, label, maxRetries),
+      assertNotCancelled: () => this.assertNotCancelled(),
+      isCancelled: () => this.cancelRequested,
       requestApiKeyPrompt: (payload) => this.requestApiKeyPrompt(payload),
       askClarifyingQuestions: (questions) => this.askClarifyingQuestions(questions),
       refineGoal: (goal, answers) => this.refineGoal(goal, answers),
@@ -351,6 +354,7 @@ export class OmniOrchestrator {
       planner: this.planner,
       toolManager: this.toolManager,
       memory: this.memory,
+      sharedMemory: this.sharedMemory,
       taskCompass: this.taskCompass,
       apiKeys: this.apiKeys,
       runCoders: (plan, ctx) =>
@@ -543,7 +547,11 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
 
   async start(rawGoal: string): Promise<DeliveryReport> {
     if (this.isRunning) throw new Error('Orchestrator already running');
+    if (OmniOrchestrator.activeInstance && OmniOrchestrator.activeInstance.isRunning) {
+      throw new Error('Another Omni orchestration is already running');
+    }
     this.isRunning = true;
+    OmniOrchestrator.activeInstance = this;
     this.cancelRequested = false;
     this.spawnedAgents = new Set<AgentRole>(['orchestrator']);
     this.runtimeEdges = [];
@@ -588,13 +596,18 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
       const pipelineServices = this.createPipelineServices();
 
       // INTAKE: scan workspace, bootstrap docs, create goal packet, triage
+      this.assertNotCancelled();
       await intakePhase.run(pipelineHost, pipelineCtx, pipelineServices);
       this.currentTier = pipelineCtx.tier;
 
       // RESEARCH → SELF-PROMPT → PLANNING → CONTEXT-ENRICH
+      this.assertNotCancelled();
       await researchPhase.run(pipelineHost, pipelineCtx, pipelineServices);
+      this.assertNotCancelled();
       await selfPromptPhase.run(pipelineHost, pipelineCtx, pipelineServices);
+      this.assertNotCancelled();
       await planningPhase.run(pipelineHost, pipelineCtx, pipelineServices);
+      this.assertNotCancelled();
       await contextEnrichPhase.run(pipelineHost, pipelineCtx, pipelineServices);
 
       // BUILD → AUDIT → SECURITY → VERIFY (with retry loop)
@@ -604,6 +617,7 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
       });
 
       // DELIVER
+      this.assertNotCancelled();
       const deliverOutcome = await deliverPhase.run(pipelineHost, pipelineCtx, pipelineServices);
       if (!deliverOutcome.report) {
         throw new Error('Deliver phase did not produce a report');
@@ -617,7 +631,9 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
       });
       throw err;
     } finally {
+      this.sharedMemory.flushToDisk(true);
       this.isRunning = false;
+      OmniOrchestrator.activeInstance = null;
     }
   }
 
@@ -910,6 +926,7 @@ ${decisionsText}`.trim();
   }
 
   private async runPhaseSafely<T>(fn: () => Promise<T>, label: string, maxRetries = 2): Promise<T> {
+    this.assertNotCancelled();
     let lastErr: unknown;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {

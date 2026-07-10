@@ -134,6 +134,10 @@ export class ProceduralMemory {
     return this.skills.get(id);
   }
 
+  importSkill(skill: Skill): void {
+    this.skills.set(skill.id, skill);
+  }
+
   getAllSkills(): Skill[] {
     return Array.from(this.skills.values());
   }

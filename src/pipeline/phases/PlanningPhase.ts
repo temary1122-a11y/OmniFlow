@@ -115,19 +115,27 @@ async function runFullPlanning(
     host.chat('assistant', `Учту правки при сборке: ${approval.feedback}`);
   }
 
-  const planAlignment = services.taskCompass.checkAlignment(
-    `Plan created: ${plan.architecture}`,
-    ctx.refinedGoal
-  );
-  host.eventBus.emit({
-    type: 'REASONING_TRACE',
-    payload: {
-      agentId: 'orchestrator',
-      phase: 'planning',
-      thought: `Plan alignment check: ${planAlignment.aligned ? 'ALIGNED' : 'DRIFT DETECTED'} (drift: ${planAlignment.driftScore.toFixed(2)})`,
-      timestamp: Date.now(),
-    },
-  });
+    const planAlignment = services.taskCompass.checkAlignment(
+      `Plan created: ${plan.architecture}`,
+      ctx.refinedGoal
+    );
+    host.eventBus.emit({
+      type: 'REASONING_TRACE',
+      payload: {
+        agentId: 'orchestrator',
+        phase: 'planning',
+        thought: `Plan alignment check: ${planAlignment.aligned ? 'ALIGNED' : 'DRIFT DETECTED'} (drift: ${planAlignment.driftScore.toFixed(2)})`,
+        timestamp: Date.now(),
+      },
+    });
+
+    if (services.sharedMemory) {
+      services.sharedMemory.recordEpisode(
+        'planning',
+        { goal: ctx.refinedGoal, stack: plan.stack, architecture: plan.architecture, subtaskCount: plan.subtasks.length },
+        0.6
+      );
+    }
 
   host.setAgent('planner', 'done');
   host.chat(

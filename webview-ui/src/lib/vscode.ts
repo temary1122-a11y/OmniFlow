@@ -72,12 +72,22 @@ export const isDemoMode = () => !backendConnected;
  * warning instead of silently triggering the hardcoded demo simulator. The
  * simulator is opt-in via the store's `demoMode` flag.
  */
+// Drop identical commands sent in rapid succession. Some UI controls (e.g. a
+// native <button> that fires both onClick and onKeyDown) can emit the same
+// command twice from a single user action. This is the safety net that keeps
+// the extension from receiving duplicate instructions.
+const recentCommands = new Map<string, number>();
+
 export function postCommand(command: UiCommand): void {
-  console.log('[vscode.ts] postCommand called:', JSON.stringify(command, null, 2));
-  console.log('[vscode.ts] backendConnected:', backendConnected, 'api:', !!acquireApi());
+  const key = JSON.stringify(command);
+  const now = Date.now();
+  const last = recentCommands.get(key) ?? 0;
+  if (now - last < 250) return; // dedupe identical rapid repeats
+  recentCommands.set(key, now);
+
+  console.log('[vscode.ts] postCommand', command.command, 'connected=' + backendConnected);
   const api = acquireApi();
   if (api && backendConnected) {
-    console.log('[vscode.ts] Sending message via VS Code API');
     api.postMessage(command);
     return;
   }

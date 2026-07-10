@@ -3,6 +3,9 @@ import { logLLMCall } from './LLMLogger';
 import type { AgentRole, Phase } from '../../shared/types';
 import { getChatEndpoint } from './providerUtils';
 
+/** Gate verbose per-call diagnostics behind an env flag to keep the console clean. */
+const LLM_DEBUG = process.env.OMNI_LLM_DEBUG === '1';
+
 export interface LLMMessage {
   role: 'system' | 'user' | 'assistant';
   content: string;
@@ -43,12 +46,7 @@ export class LLMClient {
   ): Promise<LLMResponse> {
     const logContext = context ?? { agentRole: 'orchestrator' as AgentRole, phase: 'intake' as Phase };
 
-    console.log('[LLMClient] complete called:', {
-      provider: selection.provider,
-      model: selection.modelId,
-      availableProviders: Object.keys(apiKeys),
-      hasKeyForProvider: Boolean(apiKeys[selection.provider]),
-    });
+    console.log('[LLMClient] complete', selection.provider, selection.modelId);
 
     if (selection.provider === 'fallback') {
       const response = {
@@ -70,12 +68,7 @@ export class LLMClient {
 
     const key = apiKeys[selection.provider];
     const needsKey = selection.provider !== 'ollama';
-    console.log('[LLMClient] Checking API key:', {
-      provider: selection.provider,
-      needsKey,
-      hasKey: Boolean(key),
-      keyPreview: key ? key.substring(0, 4) + '...' + key.substring(key.length - 4) : 'none',
-    });
+    console.log('[LLMClient] using provider', selection.provider, 'hasKey=' + Boolean(key));
 
     if (needsKey && !key) {
       const response = {
@@ -130,16 +123,13 @@ export class LLMClient {
       const data = (await res.json()) as {
         choices?: { message?: { content?: string; tool_calls?: any[] } }[];
       };
-      console.log('[LLMClient] API response data:', JSON.stringify(data, null, 2).substring(0, 1000));
-      let content = data.choices?.[0]?.message?.content ?? '';
-      console.log('[LLMClient] Extracted content:', content);
-      console.log('[LLMClient] Content length:', content.length);
+      const content = data.choices?.[0]?.message?.content ?? '';
       const message = (data.choices?.[0]?.message ?? {}) as Record<string, unknown>;
       const reasoning = (message.reasoning_content as string | undefined)
         ?? (message.thinking as string | undefined)
         ?? (message.reasoning as string | undefined)
         ?? undefined;
-      console.log('[LLMClient] Extracted reasoning:', reasoning ? 'present' : 'none');
+      if (LLM_DEBUG) console.log('[LLMClient] Extracted reasoning:', reasoning ? 'present' : 'none');
 
       // Native tool calls (OpenAI-compatible). Parse each definition's arguments JSON.
       const rawToolCalls = (message.tool_calls as any[] | undefined) ?? [];
@@ -167,14 +157,11 @@ export class LLMClient {
          }
         toolCalls.push({ id: tc.id ?? `call_${toolCalls.length}`, name: tc.function.name, arguments: args });
       }
-      console.log('[LLMClient] Native tool calls:', toolCalls.length);
 
-      if (!content && reasoning) {
-        content = reasoning;
-      }
+      console.log('[LLMClient] response', selection.provider, selection.modelId, 'contentLen=' + content.length, 'tools=' + toolCalls.length, 'reasoning=' + (reasoning ? 'y' : 'n'));
 
       if (!content && toolCalls.length === 0) {
-        console.log('[LLMClient] Empty content and no tool calls — model returned reasoning only (role may retry)');
+        console.log('[LLMClient] model returned reasoning only (no content/tool calls)');
       }
 
       logLLMCall({

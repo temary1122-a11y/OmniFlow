@@ -3,12 +3,14 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 
 import { OmniOrchestrator } from './core/OmniOrchestrator';
+import { MemoryFacade } from './memory/MemoryFacade';
 
-import { OmniPanel, WebviewBridgeImpl, setOrchestrator } from './webview/OmniPanel';
+import { OmniPanel, WebviewBridgeImpl, setOrchestrator, getOrchestrator } from './webview/OmniPanel';
 
 import { OmniSidebarProvider } from './webview/OmniSidebarProvider';
 
 import { ConfigManager } from './config/ConfigManager';
+
 import { FreeModelCapabilityRegistry } from './routing/ModelCapabilityRegistry';
 
 import { initLLMLogger } from './routing/LLMLogger';
@@ -31,7 +33,7 @@ function notifyError(bridge: WebviewBridgeImpl, message: string, phase: string):
 }
 
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
 
   const log = vscode.window.createOutputChannel('Omni');
 
@@ -40,6 +42,9 @@ export function activate(context: vscode.ExtensionContext): void {
     console.log('Omni extension activated');
 
     log.appendLine('Omni extension activated');
+
+    ConfigManager.initSecretStorage(context.secrets);
+    await ConfigManager.preloadSecrets();
 
     // Check API key configuration
     const config = ConfigManager.load();
@@ -122,14 +127,15 @@ export function activate(context: vscode.ExtensionContext): void {
             fail(`Failed to open Omni Cockpit: ${e instanceof Error ? e.message : e}`, 'intake');
             return;
           }
-          let orch: OmniOrchestrator;
-          try {
-            orch = new OmniOrchestrator(root);
-          } catch (e) {
-            fail(`Orchestrator failed to initialize: ${e instanceof Error ? e.message : e}`, 'intake');
+          const existing = getOrchestrator();
+          if (existing && existing.isCurrentlyRunning()) {
+            log.appendLine('[Omni] start ignored — orchestration already running');
             return;
           }
-          orch.setWebviewBridge(bridge);
+          const orch = existing ?? new OmniOrchestrator(root);
+          if (!existing) {
+            orch.setWebviewBridge(bridge);
+          }
           setOrchestrator(orch);
           log.appendLine(`[Omni] orch started, awaiting start...`);
           await vscode.window.withProgress(
@@ -268,7 +274,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
 
 export function deactivate(): void {
-
+  const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  if (root) {
+    const mem = MemoryFacade.getInstance(root);
+    mem.flushToDisk(true);
+  }
   setOrchestrator(null);
-
 }

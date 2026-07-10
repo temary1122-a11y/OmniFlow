@@ -29,6 +29,7 @@ export async function runBuildVerifyLoop(
   let retries = 0;
 
   while (true) {
+    host.assertNotCancelled();
     await buildPhase.run(host, ctx, services);
     await auditSecurityPhase.run(host, ctx, services);
 

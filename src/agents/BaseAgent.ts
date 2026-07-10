@@ -1,6 +1,28 @@
-import type { HandoffContract, ArtifactManifest, FileArtifact, AgentReasoning, Phase, AgentRole, AgentCommentary, ToolCallEvent, ToolResultEvent } from '../../shared/types';
+import type { HandoffContract, ArtifactManifest, FileArtifact, AgentReasoning, Phase, AgentRole, AgentCommentary, ToolCallEvent, ToolResultEvent, Complexity } from '../../shared/types';
 import * as crypto from 'crypto';
 import { EventBus } from '../core/EventBus';
+
+/**
+ * Minimal structural type for any model router the agents can call. Duck-typed
+ * so BaseAgent does not take a hard dependency on a concrete router class.
+ */
+export interface LlmReviewRouter {
+  call(
+    request: { phase: Phase; agentRole: AgentRole; complexity: Complexity },
+    prompt: string,
+    systemPrompt: string,
+    apiKeys: Record<string, string>,
+    forceProvider?: string,
+    tools?: unknown[]
+  ): Promise<{ content: string; reasoning?: string; usedFallback?: boolean; error?: string }>;
+}
+
+export interface LlmReviewResult {
+  /** Raw JSON string extracted from the model response. */
+  raw: string;
+  /** Parsed JSON object, or null if the body was not valid JSON. */
+  parsed: unknown;
+}
 
 export abstract class BaseAgent {
   protected agentId: string;
@@ -40,7 +62,17 @@ export abstract class BaseAgent {
     
     for (const text of candidates) {
       if (!text) continue;
-      
+
+      // Prefer the whole text as JSON (after stripping markdown fences). This keeps
+      // enclosing objects intact when the payload contains nested arrays.
+      const stripped = text.replace(/```(?:json)?\s*([\s\S]*?)```/g, '$1').trim();
+      try {
+        JSON.parse(stripped);
+        return stripped;
+      } catch {
+        // Continue to more lenient patterns below
+      }
+
       // Try to extract JSON from markdown code blocks
       const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (codeBlockMatch) {
@@ -72,7 +104,7 @@ export abstract class BaseAgent {
         /"bestPractices"\s*:\s*(\[[\s\S]*?\])/,
         /"patterns"\s*:\s*(\[[\s\S]*?\])/,
       ];
-      
+
       for (const pattern of propertyPatterns) {
         const match = text.match(pattern);
         if (match) {
@@ -93,8 +125,34 @@ export abstract class BaseAgent {
         // Continue to next candidate
       }
     }
-    
+
     return content || '';
+  }
+
+  /**
+   * Best-effort structured LLM call used by advisory agents (audit/security).
+   * Never throws: on any error or provider fallback it returns null so the caller
+   * can silently degrade to heuristic-only behavior. This keeps the audit/security
+   * phase from dying when the network, budget, or model is unavailable.
+   */
+  protected async callLlmJsonReview(
+    router: LlmReviewRouter | undefined,
+    apiKeys: Record<string, string> | undefined,
+    request: { phase: Phase; agentRole: AgentRole; complexity: Complexity },
+    prompt: string,
+    systemPrompt: string
+  ): Promise<LlmReviewResult | null> {
+    if (!router || !apiKeys) return null;
+    try {
+      const res = await router.call(request, prompt, systemPrompt, apiKeys);
+      if (res.usedFallback) return null;
+      const raw = this.extractJsonFromLLMResponse(res.content, res.reasoning);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      return { raw, parsed };
+    } catch {
+      return null;
+    }
   }
 
   protected emitReasoning(phase: Phase, thought: string): void {
