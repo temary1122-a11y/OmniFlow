@@ -1,0 +1,192 @@
+{
+  "name": "omni",
+  "displayName": "Omni — AI Agent Orchestrator",
+  "description": "AI agent orchestrator for VS Code. Clarifies goals, runs research/plan/build/audit/security pipeline, and delivers MVP artifacts.",
+  "version": "0.1.0",
+  "publisher": "omni",
+  "license": "MIT",
+  "icon": "media/omni-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Machine Learning"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:omni.cockpit",
+    "onCommand:omni.openCockpit",
+    "onCommand:omni.start",
+    "onCommand:omni.configureApi",
+    "onCommand:omniflow.openCockpit",
+    "onCommand:omniflow.start"
+  ],
+  "main": "./dist/src/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "omni.openCockpit",
+        "title": "Omni: Open Cockpit",
+        "category": "Omni"
+      },
+      {
+        "command": "omni.start",
+        "title": "Omni: Start Orchestration",
+        "category": "Omni"
+      },
+      {
+        "command": "omni.configureApi",
+        "title": "Omni: Configure API Keys",
+        "category": "Omni"
+      },
+      {
+        "command": "omni.openArtifact",
+        "title": "Omni: Open Artifact",
+        "category": "Omni"
+      },
+      {
+        "command": "omniflow.openCockpit",
+        "title": "OmniFlow: Open Cockpit (alias)",
+        "category": "Omni"
+      },
+      {
+        "command": "omniflow.start",
+        "title": "OmniFlow: Start (alias)",
+        "category": "Omni"
+      },
+      {
+        "command": "omni.selectModel",
+        "title": "Omni: Select LLM Model",
+        "category": "Omni"
+      }
+    ],
+    "configuration": {
+      "title": "Omni",
+      "properties": {
+        "omni.openrouterApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenRouter API key (https://openrouter.ai). Supports free models.",
+          "order": 1
+        },
+        "omni.kiloGatewayApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Kilo Gateway API key",
+          "order": 2
+        },
+        "omni.codikApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Codik router API key",
+          "order": 3
+        },
+        "omni.preferredProvider": {
+          "type": "string",
+          "enum": [
+            "openrouter",
+            "kilo-gateway",
+            "codik",
+            "ollama",
+            "fallback"
+          ],
+          "default": "openrouter",
+          "description": "Preferred LLM provider",
+          "order": 4
+        },
+        "omni.budget": {
+          "type": "string",
+          "enum": [
+            "free",
+            "low",
+            "normal",
+            "high"
+          ],
+          "default": "free",
+          "description": "Model cost budget",
+          "order": 5
+        },
+        "omni.orchestratorModel": {
+          "type": "string",
+          "default": "",
+          "description": "Custom LLM model for orchestrator role (overrides default)",
+          "order": 6
+        },
+        "omni.toolApiKeys": {
+          "type": "object",
+          "default": {},
+          "description": "API keys for external tools (e.g. EXA_API_KEY, TAVILY_API_KEY for web search). Stored in User Settings.",
+          "order": 7
+        },
+        "omni.useSupervisor": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use AgentSupervisor for parallel coder orchestration (retry, fallback, policy-driven scheduling).",
+          "order": 8
+        }
+      }
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "omni",
+          "title": "Omni",
+          "icon": "media/omni-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "omni": [
+        {
+          "type": "webview",
+          "id": "omni.cockpit",
+          "name": "Cockpit"
+        }
+      ]
+    },
+    "extensionDependencies": [
+      "ms-python.python",
+      "dbaeumer.vscode-eslint",
+      "esbenp.prettier-vscode"
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "npm run compile && npm run webview:build",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "webview:build": "npm --prefix webview-ui install && npm --prefix webview-ui run build && node scripts/sync-v3-webview.mjs",
+    "webview:dev": "npm --prefix webview-ui run dev",
+    "lint": "tsc --noEmit -p ./",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@cline/sdk": "^0.0.54",
+    "dockerode": "^4.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "reactflow": "^11.11.4",
+    "react-virtuoso": "^4.12.3",
+    "zustand": "^4.5.5",
+    "lucide-react": "^0.468.0",
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.0",
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/vscode": "^1.85.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.17",
+    "tsx": "^4.23.0",
+    "typescript": "^5.4.0",
+    "vite": "^6.0.7",
+    "vitest": "^2.1.0"
+  }
+}

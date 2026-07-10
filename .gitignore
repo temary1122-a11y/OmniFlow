@@ -1,0 +1,31 @@
+# Build output
+dist/
+node_modules/
+
+# Compiled artifacts next to TypeScript sources
+shared/**/*.js
+shared/**/*.js.map
+
+# Legacy / debug test tree (canonical suite is test/)
+tests/
+
+# Misc
+*.vsix
+.DS_Store
+
+# Tool-specific config (Kilo Code agent workspace, not part of the extension)
+.kilocode/
+
+# Stray / scratch artifacts
+output.ts
+test-ui.html
+.vscode-test/
+*.log
+
+# Planning & design artifacts (not part of the extension source)
+plans/
+docs/
+
+# Runtime output produced by the extension
+generated/
+.omniflow/
