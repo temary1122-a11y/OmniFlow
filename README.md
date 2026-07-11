@@ -82,7 +82,8 @@ Configure via **OmniFlow: Configure API Keys** or VS Code Settings -> OmniFlow.
 | `omni.preferredProvider` | enum | `openrouter` | LLM provider to use |
 | `omni.budget` | enum | `free` | Cost budget (`free`/`low`/`normal`/`high`) |
 | `omni.orchestratorModel` | string | - | Override model for the orchestrator role |
-| `omni.useSupervisor` | boolean | `false` | Parallel coder orchestration via AgentSupervisor |
+| `omni.roleModels` | object | `{}` | Override models for specific agent roles |
+| `omni.useSupervisor` | boolean | `false` | Enable parallel agent orchestration with retry logic via AgentSupervisor |
 | `omni.toolApiKeys` | object | `{}` | Keys for external tools (e.g. EXA, Tavily) |
 
 ## Development
@@ -98,6 +99,24 @@ npm run build
 | `npm run compile` | Compile the extension (tsc) |
 | `npm run webview:build` | Build the React Cockpit UI |
 | `npm test` | Run the Vitest suite |
+
+## Recent Changes
+
+### Model Configuration & UI Improvements
+
+- **Removed hardcoded model fallbacks** - Models are now fully user-configurable via settings. No more hardcoded `stepfun/step-3.7-flash:free` fallbacks.
+- **Enhanced ReAct-cycle detection** - AgentRuntime now detects subtle argument variations to prevent tool-call loops.
+- **Improved error handling** - Better error messages for settings.json permission issues and missing model configurations.
+- **Unified tool call UI** - Tool calls and results now display in a single block with status (running/success/error), eliminating visual duplication.
+- **Supervisor mode confirmed** - The `useSupervisor` setting is functional and enables parallel agent orchestration with retry logic.
+
+### UI Components
+
+- Added `OmniLogo` component (inline SVG)
+- Added `ApiKeyPromptCard` for API key prompts
+- Added `StartupScreen` for session management
+- Removed deprecated agent visualization components (AgentCard, AgentGraph, AgentsPanel, TimelineView)
+- Updated Russian translations and chat density filters
 
 ## License
 
