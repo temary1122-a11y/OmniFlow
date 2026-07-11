@@ -4,7 +4,7 @@ import type { OmniActions, OmniState } from '../storeTypes';
 /** Approval and clarifying questions slice. */
 export type ApprovalSlice = Pick<
   OmniState,
-  'pendingQuestions' | 'pendingApproval'
+  'pendingQuestions' | 'pendingApproval' | 'pendingApiKeyPrompt'
 >;
 
 export const createApprovalSlice: StateCreator<
@@ -15,4 +15,5 @@ export const createApprovalSlice: StateCreator<
 > = () => ({
   pendingQuestions: null,
   pendingApproval: null,
+  pendingApiKeyPrompt: null,
 });

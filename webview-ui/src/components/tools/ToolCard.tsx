@@ -7,15 +7,31 @@ import { monoBoxStyle } from '@/styles/mono';
 import { useOmniStore } from '@/store/omniStore';
 import { useTranslation } from '@/i18n';
 
-type ToolPart = Extract<MessagePart, { type: 'tool_call' } | { type: 'tool_result' }>;
+type ToolPart = Extract<MessagePart, { type: 'tool_call' }>;
+
+/** Pull unique, ordered http(s) URLs out of a tool result body. */
+function extractUrls(text: string): string[] {
+  const matches = typeof text === 'string' ? text.match(/https?:\/\/[^\s)]+/gi) : null;
+  if (!matches) return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const u of matches) {
+    const key = u.toLowerCase();
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(u);
+    }
+  }
+  return out;
+}
 
 const s = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
 
 const monoBox: CSSProperties = { ...monoBoxStyle, maxHeight: 260 };
 
 function TerminalView({ part }: { part: ToolPart }) {
-  const command = part.type === 'tool_call' ? s(part.args?.command) : '';
-  const output = part.type === 'tool_result' ? s(part.output) : '';
+  const command = s(part.args?.command);
+  const output = s(part.output);
   return (
     <div style={monoBox}>
       {command && <div style={{ color: 'var(--vscode-terminal-ansiGreen, #3fb950)' }}>$ {command}</div>}
@@ -26,30 +42,37 @@ function TerminalView({ part }: { part: ToolPart }) {
 
 function BrowserView({ part }: { part: ToolPart }) {
   const openExternal = useOmniStore((s) => s.openExternal);
-  const output = part.type === 'tool_result' ? s(part.output) : '';
-  const isUrl = typeof output === 'string' && /^https?:\/\//i.test(output.trim());
+  const output = s(part.output);
+  // web_search/fetch_page return source URLs (often as "SOURCE <url>" lines);
+  // surface those as clickable links to the resource being studied instead of
+  // dumping raw text or a placeholder dash.
+  const urls = extractUrls(output);
+  const linkStyle: CSSProperties = {
+    ...monoBox,
+    display: 'block',
+    width: '100%',
+    cursor: 'pointer',
+    textAlign: 'left',
+    color: 'var(--vscode-textLink-foreground, #7c6af7)',
+    background: 'none',
+    border: 'none',
+    padding: 0,
+    wordBreak: 'break-all',
+  };
   return (
     <div>
-      {isUrl ? (
-        <button
-          type="button"
-          onClick={() => openExternal(output.trim())}
-          style={{
-            ...monoBox,
-            display: 'block',
-            width: '100%',
-            cursor: 'pointer',
-            textAlign: 'left',
-            color: 'var(--vscode-textLink-foreground, #7c6af7)',
-            background: 'none',
-            border: 'none',
-            padding: 0,
-          }}
-        >
-          {output}
-        </button>
+      {urls.length > 0 ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {urls.map((u, i) => (
+            <button key={i} type="button" onClick={() => openExternal(u)} style={linkStyle}>
+              🔗 {u}
+            </button>
+          ))}
+        </div>
+      ) : output ? (
+        <div style={monoBox}>{output}</div>
       ) : (
-        <div style={monoBox}>{output || '—'}</div>
+        <div style={monoBox}>—</div>
       )}
       <div style={{ marginTop: 6, fontSize: 11, color: 'var(--vscode-descriptionForeground, #8b949e)' }}>
         🔗 sources
@@ -60,11 +83,8 @@ function BrowserView({ part }: { part: ToolPart }) {
 
 function FileView({ part }: { part: ToolPart }) {
   const openArtifact = useOmniStore((s) => s.openArtifact);
-  const path = part.type === 'tool_call' ? s(part.args?.path) : '';
-  const content =
-    part.type === 'tool_result'
-      ? s(part.output)
-      : s(part.args?.content);
+  const path = s(part.args?.path);
+  const content = s(part.output) || s(part.args?.content);
   return (
     <div>
       {path && (
@@ -92,7 +112,7 @@ function FileView({ part }: { part: ToolPart }) {
 }
 
 function TodoView({ part }: { part: ToolPart }) {
-  const todos = part.type === 'tool_call' ? part.args?.todos : undefined;
+  const todos = part.args?.todos;
   if (Array.isArray(todos) && todos.length) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -112,14 +132,11 @@ function TodoView({ part }: { part: ToolPart }) {
       </div>
     );
   }
-  return <pre style={monoBox}>{JSON.stringify(part.type === 'tool_call' ? part.args : {}, null, 2)}</pre>;
+  return <pre style={monoBox}>{JSON.stringify(part.args ?? {}, null, 2)}</pre>;
 }
 
 function ResultBody({ part }: { part: ToolPart }) {
-  const text =
-    part.type === 'tool_call'
-      ? JSON.stringify(part.args ?? {}, null, 2)
-      : s(part.output) || s(part.error) || '—';
+  const text = s(part.output) || s(part.error) || JSON.stringify(part.args ?? {}, null, 2);
   return <pre style={monoBox}>{text}</pre>;
 }
 
@@ -135,10 +152,10 @@ function renderBody(part: ToolPart) {
 export function ToolCard({ part }: { part: ToolPart }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(true);
-  const isCall = part.type === 'tool_call';
-  const success = part.type === 'tool_result' ? part.success : undefined;
+  const status = part.status ?? 'running';
+  const success = part.success;
 
-  const badge = isCall
+  const badge = status === 'running'
     ? { label: t('tool.running'), color: 'var(--vscode-terminal-ansiYellow, #d29922)' }
     : success
       ? { label: t('tool.success'), color: 'var(--vscode-terminal-ansiGreen, #3fb950)' }

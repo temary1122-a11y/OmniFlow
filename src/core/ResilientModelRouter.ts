@@ -302,7 +302,11 @@ export class ResilientModelRouter extends ModelRouter {
       m.includes('unavailable for free') ||
       m.includes('does not exist') ||
       m.includes('no longer available') ||
-      m.includes('decommissioned')
+      m.includes('decommissioned') ||
+      m.includes('not a valid model') ||
+      m.includes('invalid model') ||
+      m.includes('model not found') ||
+      m.includes('unknown model')
     );
   }
 

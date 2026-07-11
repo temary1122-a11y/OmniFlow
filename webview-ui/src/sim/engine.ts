@@ -1,8 +1,6 @@
 // TODO: INTEGRATION - delete simulateDemoFlow and rely on real backend OMNIFLOW_STATE_UPDATE + event stream
 
 import type {
-  AgentGraphEdge,
-  AgentGraphNode,
   AgentRole,
   ApprovalRequiredPayload,
   BackendEvent,
@@ -142,26 +140,6 @@ export async function simulateDemoFlow(handle: (e: BackendEvent) => void): Promi
 
     // 10. finalize
     status("orchestrator", "done", "All done.");
-    const nodes: AgentGraphNode[] = (
-      ["orchestrator", "clarifier", "researcher", "planner", "coder", "auditor", "security", "verifier"] as AgentRole[]
-    ).map((role, i) => ({
-      id: role,
-      label: role,
-      role,
-      status: "done",
-      x: 80 + (i % 4) * 160,
-      y: 60 + Math.floor(i / 4) * 120,
-    }));
-    const edges: AgentGraphEdge[] = [
-      { id: "e1", source: "orchestrator", target: "clarifier" },
-      { id: "e2", source: "orchestrator", target: "researcher" },
-      { id: "e3", source: "researcher", target: "planner" },
-      { id: "e4", source: "planner", target: "coder" },
-      { id: "e5", source: "coder", target: "auditor" },
-      { id: "e6", source: "auditor", target: "security" },
-      { id: "e7", source: "security", target: "verifier" },
-    ];
-    emit({ type: "AGENT_GRAPH_UPDATE", payload: { nodes, edges } });
   } catch (_e: unknown) {
     if (!cancelled) throw _e;
   }

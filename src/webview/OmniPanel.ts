@@ -104,6 +104,16 @@ export async function handleCockpitMessage(msg: {
           console.warn('[OmniPanel] START command received but no goal provided');
         }
         break;
+      case 'continueChat':
+        console.log('[OmniPanel] CONTINUE_CHAT command received with goal:', msg.goal);
+        if (msg.goal) {
+          console.log('[OmniPanel] executing omni.continueChat for:', msg.goal);
+          await vscode.commands.executeCommand('omni.continueChat', msg.goal);
+          console.log('[OmniPanel] omni.continueChat command executed');
+        } else {
+          console.warn('[OmniPanel] CONTINUE_CHAT command received but no goal provided');
+        }
+        break;
       case 'submitAnswers':
         getOrchestrator()?.submitClarifyingAnswers(
           (msg.answers ?? []) as Parameters<OmniOrchestrator['submitClarifyingAnswers']>[0]
@@ -164,6 +174,22 @@ export async function handleCockpitMessage(msg: {
           language: 'json',
         });
         await vscode.window.showTextDocument(doc, { preview: false });
+        break;
+      }
+      case 'loadSession': {
+        const sessionId = (msg as { sessionId?: string }).sessionId;
+        if (sessionId) {
+          // TODO: Implement session loading from storage
+          vscode.window.showInformationMessage(`Загрузка сессии ${sessionId}`);
+        }
+        break;
+      }
+      case 'deleteSession': {
+        const sessionId = (msg as { sessionId?: string }).sessionId;
+        if (sessionId) {
+          // TODO: Implement session deletion from storage
+          vscode.window.showInformationMessage(`Удаление сессии ${sessionId}`);
+        }
         break;
       }
       case 'switchAgent':

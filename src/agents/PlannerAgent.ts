@@ -94,14 +94,10 @@ ${researchBlock}
          agentId: 'planner',
          tools: plannerTools,
          maxIterations: 8,
-         systemPrompt: this.composeSystemPrompt('planning', goal, rolePrompt, { researchSummary }),
-         workspaceRoot,
-         onReasoning: (thought) => this.emitReasoning('planning', thought),
-         onToolCall: (tool, args) => this.emitToolCall('planning', tool, args),
-onToolResult: (tool, result) => {
-            this.emitToolResult('planning', tool, result.success, result.output, result.error);
-          },
-         apiKeys: this.apiKeys,
+          systemPrompt: this.composeSystemPrompt('planning', goal, rolePrompt, { researchSummary }),
+          workspaceRoot,
+          onReasoning: (thought) => this.emitReasoning('planning', thought),
+          apiKeys: this.apiKeys,
         }
       );
 

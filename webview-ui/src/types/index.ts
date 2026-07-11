@@ -90,22 +90,6 @@ export interface AgentStatusUpdate {
   progress?: number;
 }
 
-export interface AgentGraphNode {
-  id: string;
-  label: string;
-  role: AgentRole;
-  status: AgentStatus;
-  x: number;
-  y: number;
-}
-
-export interface AgentGraphEdge {
-  id: string;
-  source: string;
-  target: string;
-  animated?: boolean;
-}
-
 export interface ApprovalResponse {
   requestId: string;
   approved: boolean;
@@ -240,7 +224,6 @@ export type BackendEvent =
   | { type: 'OMNIFLOW_STATE_UPDATE'; payload: OmniState }
   | { type: 'PHASE_TRANSITION'; payload: { from: Phase; to: Phase; timestamp: number } }
   | { type: 'AGENT_STATUS_UPDATE'; payload: AgentStatusUpdate }
-  | { type: 'AGENT_GRAPH_UPDATE'; payload: { nodes: AgentGraphNode[]; edges: AgentGraphEdge[] } }
   | { type: 'ARTIFACT_CREATED'; payload: ArtifactCreatedPayload }
   | { type: 'VERIFICATION_RESULT'; payload: { subtaskId: string; verdict: VerificationVerdict; risks: unknown[] } }
   | { type: 'DELIVERY_COMPLETE'; payload: { taskId: string; report: DeliveryReport } }
@@ -271,6 +254,7 @@ export type BackendEvent =
 
 export type UiCommand =
   | { command: 'start'; goal: string; mode?: 'chat' | 'code' | 'ask' }
+  | { command: 'continueChat'; goal: string }
   | { command: 'submitAnswers'; answers: ClarifyingAnswer[] }
   | { command: 'submitApproval'; requestId: string; approved: boolean; feedback?: string }
   | { command: 'openArtifact'; filePath: string }
@@ -285,15 +269,16 @@ export type UiCommand =
   | { command: 'openExternal'; url: string }
   | { command: 'submitApiKeyPrompt'; requestId: string; action: 'proceed' | 'skip' | 'fallback'; keys?: Record<string, string> }
   | { command: 'requestWorkspace' }
-  | { command: 'updateSettings'; chatVerbosity?: 'minimal' | 'normal' | 'debug'; useSupervisor?: boolean; budget?: 'free' | 'low' | 'normal' | 'high' };
+  | { command: 'updateSettings'; chatVerbosity?: 'minimal' | 'normal' | 'debug'; useSupervisor?: boolean; budget?: 'free' | 'low' | 'normal' | 'high' }
+  | { command: 'loadSession'; sessionId: string }
+  | { command: 'deleteSession'; sessionId: string };
 
 // ─── UI Message Model ───────────────────────────────────────
 
 export type MessagePart =
   | { type: 'text'; content: string }
   | { type: 'reasoning'; content: string; agentId: AgentRole; phase: Phase }
-  | { type: 'tool_call'; toolName: string; args?: Record<string, unknown>; agentId?: AgentRole; callId?: string }
-  | { type: 'tool_result'; toolName: string; success: boolean; output?: string; error?: string; agentId?: AgentRole; callId?: string }
+  | { type: 'tool_call'; toolName: string; args?: Record<string, unknown>; agentId?: AgentRole; callId?: string; success?: boolean; output?: string; error?: string; status?: 'running' | 'success' | 'error' }
   | { type: 'code'; language: string; code: string }
   | { type: 'file_diff'; filePath: string; diff: string }
   | { type: 'agent_consult'; from: string; to: AgentRole; question: string; answer?: string }

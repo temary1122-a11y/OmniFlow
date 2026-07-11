@@ -29,8 +29,6 @@ const FG = 'var(--color-text-primary, #e6e6e6)';
 const DESC = 'var(--color-text-secondary, #8b949e)';
 const ERROR = 'var(--color-error, #f85149)';
 
-type Mode = 'code' | 'chat' | 'plan';
-
 export function Toolbar() {
   const { t } = useTranslation();
   const currentPhase = useOmniStore((s) => s.currentPhase);
@@ -50,7 +48,6 @@ export function Toolbar() {
   const dismissError = useOmniStore((s) => s.dismissError);
   const configureApi = useOmniStore((s) => s.configureApi);
 
-  const [mode, setMode] = useState<Mode>('code');
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -108,42 +105,6 @@ export function Toolbar() {
           <OmniLogo size={15} />
         </span>
         <span style={{ fontSize: 14, fontWeight: 700, letterSpacing: 0.2 }}>Omni</span>
-      </div>
-
-      {/* Mode Toggle */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 2,
-          padding: 3,
-          borderRadius: 8,
-          background: 'var(--color-bg-tertiary, rgba(255,255,255,0.03))',
-          border: `1px solid ${BORDER}`,
-          flexShrink: 0,
-        }}
-      >
-        {(['code', 'chat', 'plan'] as Mode[]).map((m) => (
-          <button
-            key={m}
-            type="button"
-            onClick={() => setMode(m)}
-            style={{
-              padding: '4px 12px',
-              borderRadius: 6,
-              fontSize: 12,
-              fontWeight: 500,
-              cursor: 'pointer',
-              background: mode === m ? ACCENT : 'transparent',
-              color: mode === m ? '#fff' : DESC,
-              border: 'none',
-              transition: 'all 150ms ease',
-              textTransform: 'capitalize',
-            }}
-          >
-            {t(`toolbar.${m}`)}
-          </button>
-        ))}
       </div>
 
       {/* Phase chip */}

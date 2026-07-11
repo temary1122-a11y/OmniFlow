@@ -5,9 +5,8 @@ import type {
   Message,
   ClarifyingQuestion,
   ClarifyingAnswer,
-  AgentGraphNode,
-  AgentGraphEdge,
   ApprovalRequiredPayload,
+  ApiKeyPromptPayload,
   WorkspaceFile,
 } from '@/types';
 import type { ChatVerbosity } from '@/lib/chatFilters';
@@ -24,14 +23,12 @@ export interface OmniState {
   completedPhases: Phase[];
   messages: Message[];
   agentStatuses: Record<AgentRole, AgentStatus>;
-  agentGraph: { nodes: AgentGraphNode[]; edges: AgentGraphEdge[] };
   reasoningTraces: Record<AgentRole, string[]>;
-  activeTab: 'chat' | 'agents' | 'files' | 'sessions' | 'settings';
+  activeTab: 'chat' | 'files' | 'sessions' | 'settings';
   sidebarOpen: boolean;
-  selectedAgentId: AgentRole | null;
-  showAgentDetail: boolean;
   pendingQuestions: ClarifyingQuestion[] | null;
   pendingApproval: ApprovalRequiredPayload | null;
+  pendingApiKeyPrompt: ApiKeyPromptPayload | null;
   artifacts: string[];
   providerInfo: Record<string, { hasKey: boolean; budget: string }>;
   lastError: { error: string; phase?: Phase; recoverable: boolean } | null;
@@ -44,16 +41,16 @@ export interface OmniState {
   budget: 'free' | 'low' | 'normal' | 'high';
   activityLog: string[];
   demoMode: boolean;
+  recentSessions: Array<{ id: string; goal: string; timestamp: number; messageCount: number }>;
 }
 
 export interface OmniActions {
   handleBackendEvent(event: import('@/types').BackendEvent): void;
   sendCommand(command: import('@/types').UiCommand['command'], payload?: Record<string, unknown>): void;
   startNewSession(goal: string, mode?: 'chat' | 'code' | 'ask'): void;
+  continueChat(goal: string): void;
   setActiveTab(tab: OmniState['activeTab']): void;
   setSidebarOpen(open: boolean): void;
-  setSelectedAgent(agentId: AgentRole | null): void;
-  setShowAgentDetail(show: boolean): void;
   setStreaming(streaming: boolean): void;
   clearMessages(): void;
   dismissError(): void;
@@ -63,6 +60,7 @@ export interface OmniActions {
   openExternal(url: string): void;
   submitAnswers(answers: ClarifyingAnswer[]): void;
   submitApproval(requestId: string, approved: boolean, feedback?: string): void;
+  submitApiKeyPrompt(requestId: string, action: 'proceed' | 'skip' | 'fallback', keys?: Record<string, string>): void;
   togglePause(): void;
   stopGeneration(): void;
   continueSession(): void;
@@ -70,7 +68,6 @@ export interface OmniActions {
   switchAgent(agentId: AgentRole): void;
   requestWorkspace(): void;
   resetSession(): void;
-  scrollToPhase(phase: Phase): void;
   clearScrollTarget(): void;
   setChatVerbosity(v: ChatVerbosity): void;
   setUseSupervisor(enabled: boolean): void;
@@ -81,6 +78,8 @@ export interface OmniActions {
     useSupervisor?: boolean;
     budget?: OmniState['budget'];
   }): void;
+  loadSession(sessionId: string): void;
+  deleteSession(sessionId: string): void;
 }
 
 export function idleStatuses(): Record<AgentRole, AgentStatus> {
@@ -106,14 +105,12 @@ export const initialOmniState: OmniState = {
   completedPhases: [],
   messages: [],
   agentStatuses: idleStatuses(),
-  agentGraph: { nodes: [], edges: [] },
   reasoningTraces: emptyTraces(),
   activeTab: 'chat',
   sidebarOpen: false,
-  selectedAgentId: null,
-  showAgentDetail: false,
   pendingQuestions: null,
   pendingApproval: null,
+  pendingApiKeyPrompt: null,
   artifacts: [],
   providerInfo: {},
   lastError: null,
@@ -126,4 +123,5 @@ export const initialOmniState: OmniState = {
   budget: 'free',
   activityLog: [],
   demoMode: false,
+  recentSessions: [],
 };

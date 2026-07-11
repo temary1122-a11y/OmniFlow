@@ -98,6 +98,9 @@ export class ModelRouter {
     if (forceProvider) {
       console.log('[ModelRouter] Using forced provider:', forceProvider);
       const modelId = this.getModelForRole(request.agentRole, forceProvider as any, request.budget ?? this.budget);
+      if (!modelId) {
+        throw new Error(`No model available for role ${request.agentRole} on provider ${forceProvider}. Please configure models in settings.`);
+      }
       const maxTokens = request.agentRole === 'coder' ? 4000 : 3500;
       return { provider: forceProvider as any, modelId, costTier: this.budget === 'free' ? 'free' : 'cheap', maxTokens };
     }
@@ -130,6 +133,9 @@ export class ModelRouter {
     // Legacy routing fallback
     const provider = this.resolveProvider(keys);
     const modelId = this.getModelForRole(request.agentRole, provider, request.budget ?? this.budget);
+    if (!modelId) {
+      throw new Error(`No model available for role ${request.agentRole} on provider ${provider}. Please configure models in settings.`);
+    }
     const maxTokens = request.agentRole === 'coder' ? 4000 : 3500;
 
     return { provider, modelId, costTier: this.budget === 'free' ? 'free' : 'cheap', maxTokens };
@@ -139,7 +145,7 @@ export class ModelRouter {
     role: AgentRole,
     provider: Provider,
     budget: 'free' | 'low' | 'normal' | 'high'
-  ): string {
+  ): string | undefined {
     // Effective budget: freeOnly (credits exhausted) overrides everything.
     const effectiveBudget: 'free' | 'low' | 'normal' | 'high' =
       this.freeOnly ? 'free' : budget;
@@ -158,12 +164,12 @@ export class ModelRouter {
     }
 
     // Kilo Gateway: drive selection from the indexed free-models registry instead of a
-    // hardcoded single model. Falls back to stepfun only if nothing better is indexed.
+    // hardcoded single model. Returns undefined if no model is available.
     if (provider === 'kilo-gateway') {
       if (effectiveBudget === 'high') return 'gpt-4o';
       if (effectiveBudget === 'normal' || effectiveBudget === 'low') return 'gpt-4o-mini';
       const indexed = this.selectFreeModelForProvider('kilo-gateway', role);
-      return indexed ?? 'stepfun/step-3.7-flash:free';
+      return indexed;
     }
 
     // Prefer a registry-indexed free model for this role+provider (populated by
@@ -176,7 +182,7 @@ export class ModelRouter {
     const roleModel = table[role];
     if (roleModel) return roleModel;
 
-    return 'stepfun/step-3.7-flash:free';
+    return undefined; // No model available - caller should handle this
   }
 
   /**
@@ -189,6 +195,7 @@ export class ModelRouter {
     try {
       const provider = this.resolveProvider(this.apiKeys);
       const modelId = this.getModelForRole(role, provider, this.budget);
+      if (!modelId) return 0;
       const cap = this.capabilityRegistry.getModel(modelId);
       if (cap && cap.contextWindow > 0) return cap.contextWindow;
     } catch {
@@ -251,8 +258,7 @@ export class ModelRouter {
       if (model) add(provider, model);
     }
 
-    // 4. Safe ultimate fallbacks
-    add('kilo-gateway', 'stepfun/step-3.7-flash:free');
+    // 4. Safe ultimate fallbacks (only ollama since it's local)
     add('ollama', 'llama3.2');
 
     return candidates;

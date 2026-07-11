@@ -84,8 +84,20 @@ export class ConfigManager {
   }
 
   static async setRoleModels(map: Partial<Record<AgentRole, string>>): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration('omni');
-    await cfg.update('roleModels', map, vscode.ConfigurationTarget.Global);
+    try {
+      const cfg = vscode.workspace.getConfiguration('omni');
+      await cfg.update('roleModels', map, vscode.ConfigurationTarget.Global);
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      if (message.includes('EPERM') || message.includes('operation not permitted')) {
+        throw new Error(
+          'Cannot save settings: VS Code lacks permission to write settings.json. ' +
+          'Solutions: 1) Run VS Code as Administrator, 2) Check if settings.json is read-only, ' +
+          '3) Close other VS Code instances, 4) Check antivirus/security software blocking.'
+        );
+      }
+      throw error;
+    }
   }
 
   static async updateSettings(partial: {
@@ -93,15 +105,27 @@ export class ConfigManager {
     preferredProvider?: Provider;
     useSupervisor?: boolean;
   }): Promise<void> {
-    const cfg = vscode.workspace.getConfiguration('omni');
-    if (partial.budget !== undefined) {
-      await cfg.update('budget', partial.budget, vscode.ConfigurationTarget.Global);
-    }
-    if (partial.preferredProvider !== undefined) {
-      await cfg.update('preferredProvider', partial.preferredProvider, vscode.ConfigurationTarget.Global);
-    }
-    if (partial.useSupervisor !== undefined) {
-      await cfg.update('useSupervisor', partial.useSupervisor, vscode.ConfigurationTarget.Global);
+    try {
+      const cfg = vscode.workspace.getConfiguration('omni');
+      if (partial.budget !== undefined) {
+        await cfg.update('budget', partial.budget, vscode.ConfigurationTarget.Global);
+      }
+      if (partial.preferredProvider !== undefined) {
+        await cfg.update('preferredProvider', partial.preferredProvider, vscode.ConfigurationTarget.Global);
+      }
+      if (partial.useSupervisor !== undefined) {
+        await cfg.update('useSupervisor', partial.useSupervisor, vscode.ConfigurationTarget.Global);
+      }
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      if (message.includes('EPERM') || message.includes('operation not permitted')) {
+        throw new Error(
+          'Cannot save settings: VS Code lacks permission to write settings.json. ' +
+          'Solutions: 1) Run VS Code as Administrator, 2) Check if settings.json is read-only, ' +
+          '3) Close other VS Code instances, 4) Check antivirus/security software blocking.'
+        );
+      }
+      throw error;
     }
   }
 

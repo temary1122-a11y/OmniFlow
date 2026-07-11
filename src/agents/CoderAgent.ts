@@ -137,10 +137,6 @@ You MUST write the implementation to disk using the write_file tool. Never retur
         workspaceRoot,
         boundary: contract.boundary,
         onReasoning: (thought) => this.emitReasoning('build', thought),
-        onToolCall: (tool, args) => this.emitToolCall('build', tool, args),
-        onToolResult: (tool, result) => {
-          this.emitToolResult('build', tool, result.success, result.output, result.error);
-        },
         apiKeys: this.apiKeys,
         memory: this.memory,
       }

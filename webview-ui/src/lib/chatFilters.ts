@@ -32,6 +32,16 @@ export function shouldShowToolInChat(verbosity: ChatVerbosity, toolName: string)
   return true;
 }
 
+/**
+ * The researcher writes a JSON report (research-report.json) for Omni internals.
+ * That is a system function and must not be rendered in the user's chat.
+ */
+export function isSystemReportWrite(toolName: string, args?: Record<string, unknown> | null): boolean {
+  if (toolName !== 'write_file' && toolName !== 'writeFile') return false;
+  const p = typeof args?.path === 'string' ? args.path : '';
+  return /research-report\.json$/i.test(p) || /research-report\.json/i.test(p);
+}
+
 export function shouldShowCommentary(
   verbosity: ChatVerbosity,
   message: string,

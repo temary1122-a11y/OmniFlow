@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { BackendEvent, UiCommand, AgentRole, AgentStatus, Phase, ClarifyingAnswer } from '@/types';
+import type { BackendEvent, UiCommand, AgentRole, AgentStatus, ClarifyingAnswer, Message } from '@/types';
 import { type OmniState, type OmniActions, idleStatuses, emptyTraces, initialOmniState } from './storeTypes';
 import { postCommand, isBackendConnected } from '@/lib/vscode';
 import { simulateDemoFlow } from '@/sim/engine';
@@ -8,6 +8,7 @@ import {
   shouldShowLlmCall,
   shouldShowReasoningInChat,
   shouldShowToolInChat,
+  isSystemReportWrite,
   type ChatVerbosity,
 } from '@/lib/chatFilters';
 import { appendPart, callIndex, uid } from './storeUtils';
@@ -35,7 +36,7 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
             agentStatuses: payload.agents as Record<AgentRole, AgentStatus>,
             artifacts: payload.artifacts,
             isRunning: payload.isRunning,
-            // A non-running backend means any pause was cleared.
+            isStreaming: (payload as { isStreaming?: boolean }).isStreaming ?? get().isStreaming,
             isPaused: payload.isRunning ? get().isPaused : false,
           });
           break;
@@ -55,19 +56,9 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
           break;
 
         case 'AGENT_STATUS_UPDATE':
-          set((s) => {
-            const nodes = s.agentGraph.nodes.map((n) =>
-              n.role === payload.agentId ? { ...n, status: payload.status } : n,
-            );
-            return {
-              agentStatuses: { ...s.agentStatuses, [payload.agentId]: payload.status },
-              agentGraph: { ...s.agentGraph, nodes },
-            };
-          });
-          break;
-
-        case 'AGENT_GRAPH_UPDATE':
-          set({ agentGraph: { nodes: payload.nodes, edges: payload.edges } });
+          set((s) => ({
+            agentStatuses: { ...s.agentStatuses, [payload.agentId]: payload.status },
+          }));
           break;
 
         case 'ARTIFACT_CREATED':
@@ -102,9 +93,8 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
             isStreaming: false,
             isPaused: false,
             messages: appendPart(s.messages, {
-              type: 'code',
-              language: 'bash',
-              code: `$ ${payload.command}\n${payload.output}`,
+              type: 'delivery',
+              report: payload.report,
             }),
           }));
           break;
@@ -194,13 +184,19 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
             logActivity(`tool ${payload.toolName}`);
             break;
           }
+          // System function: the researcher's report file is written for Omni
+          // internals and must not appear in the user's chat.
+          if (isSystemReportWrite(payload.toolName, payload.args)) {
+            logActivity(`tool ${payload.toolName} (system report)`);
+            break;
+          }
           set((s) => {
             const messages = appendPart(s.messages, {
               type: 'tool_call',
               toolName: payload.toolName,
               args: payload.args,
               agentId: payload.agentId,
-              callId: payload.timestamp.toString(),
+              callId: payload.callId ?? payload.timestamp.toString(),
             });
             callIndex.set(payload.callId ?? payload.timestamp.toString(), messages.length - 1);
             return { messages };
@@ -209,27 +205,32 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
         }
 
         case 'TOOL_RESULT': {
-        const callId = payload.callId ?? payload.timestamp.toString();
-        const msgIdx = callIndex.get(callId);
+          const callId = payload.callId ?? payload.timestamp.toString();
+          const msgIdx = callIndex.get(callId);
           if (msgIdx === undefined) break;
           set((s) => {
             const next = s.messages.slice();
             if (!next[msgIdx]) return {};
             const msg = next[msgIdx];
+            // Find the tool_call part and update it with result
+            const toolCallPartIndex = msg.parts.findIndex(
+              (p) => p.type === 'tool_call' && (p as any).callId === callId
+            );
+            if (toolCallPartIndex === -1) return {};
             next[msgIdx] = {
               ...msg,
-              parts: [
-                ...msg.parts,
-                {
-                  type: 'tool_result',
-                  toolName: payload.toolName,
-                  success: payload.success,
-                  output: payload.output,
-                  error: payload.error,
-                  agentId: payload.agentId,
-                  callId,
-                },
-              ],
+              parts: msg.parts.map((p, i) =>
+                i === toolCallPartIndex
+                  ? {
+                      ...p,
+                      type: 'tool_call' as const,
+                      success: payload.success,
+                      output: payload.output,
+                      error: payload.error,
+                      status: payload.success ? 'success' : 'error',
+                    }
+                  : p
+              ),
             };
             return { messages: next };
           });
@@ -295,14 +296,24 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
           set({ pendingApproval: null });
           break;
 
+        case 'API_KEY_PROMPT':
+          set({ pendingApiKeyPrompt: payload });
+          break;
+
         case 'CHAT_MESSAGE': {
-          const msg = {
+          if (payload.role === 'system') break;
+          const msg: Message = {
             id: uid('msg'),
             role: payload.role,
             timestamp: payload.timestamp,
             parts: [{ type: 'text', content: payload.content }],
           };
-          set((s) => ({ messages: [...s.messages, msg] }));
+          set((s) => ({
+            messages: [...s.messages, msg],
+            recentSessions: s.recentSessions.map((sess) =>
+              sess.id === s.sessionId ? { ...sess, messageCount: sess.messageCount + 1 } : sess
+            ),
+          }));
           break;
         }
 
@@ -312,7 +323,6 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
 
         case 'INDEX_LOADED':
         case 'INDEX_UPDATED':
-        case 'API_KEY_PROMPT':
           break;
 
         default:
@@ -344,8 +354,9 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
     startNewSession(goal: string, mode: 'chat' | 'code' | 'ask' = 'code'): void {
       console.log('[omniStore] startNewSession called with goal:', goal, 'mode:', mode);
       callIndex.clear();
+      const newSessionId = uid('sess');
       set({
-        sessionId: uid('sess'),
+        sessionId: newSessionId,
         goal,
         mode,
         messages: [],
@@ -354,15 +365,31 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
         currentPhase: 'idle',
         pendingQuestions: null,
         pendingApproval: null,
+        pendingApiKeyPrompt: null,
         lastError: null,
         isRunning: false,
         isStreaming: false,
         isPaused: false,
         artifacts: [],
         reasoningTraces: emptyTraces(),
+        recentSessions: [
+          {
+            id: newSessionId,
+            goal,
+            timestamp: Date.now(),
+            messageCount: 0,
+          },
+          ...get().recentSessions.slice(0, 9),
+        ],
       });
       console.log('[omniStore] About to send command with goal:', goal);
       get().sendCommand('start', { goal, mode });
+    },
+
+    continueChat(goal: string): void {
+      console.log('[omniStore] continueChat called with goal:', goal);
+      set({ isRunning: true, isStreaming: true });
+      get().sendCommand('continueChat', { goal });
     },
 
     setActiveTab(tab: OmniState['activeTab']): void {
@@ -371,14 +398,6 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
 
     setSidebarOpen(open: boolean): void {
       uiSlice.setSidebarOpen(open);
-    },
-
-    setSelectedAgent(agentId: AgentRole | null): void {
-      uiSlice.setSelectedAgent(agentId);
-    },
-
-    setShowAgentDetail(show: boolean): void {
-      uiSlice.setShowAgentDetail(show);
     },
 
     setStreaming(streaming: boolean): void {
@@ -416,6 +435,11 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
       get().sendCommand('submitApproval', { requestId, approved, feedback });
     },
 
+    submitApiKeyPrompt(requestId: string, action: 'proceed' | 'skip' | 'fallback', keys?: Record<string, string>): void {
+      set({ pendingApiKeyPrompt: null });
+      get().sendCommand('submitApiKeyPrompt', { requestId, action, keys });
+    },
+
     togglePause(): void {
       set({ isPaused: true });
       get().sendCommand('pauseSession');
@@ -436,7 +460,6 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
     },
 
     switchAgent(agentId: AgentRole): void {
-      set({ selectedAgentId: agentId, showAgentDetail: true });
       get().sendCommand('switchAgent', { agentId });
     },
 
@@ -458,6 +481,7 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
         currentPhase: 'idle',
         pendingQuestions: null,
         pendingApproval: null,
+        pendingApiKeyPrompt: null,
         lastError: null,
         isRunning: false,
         isStreaming: false,
@@ -467,10 +491,6 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
         workspaceTree: [],
         scrollTargetPhase: null,
       });
-    },
-
-    scrollToPhase(phase: Phase): void {
-      pipelineSlice.scrollToPhase(phase);
     },
 
     clearScrollTarget(): void {
@@ -502,6 +522,17 @@ export const useOmniStore = create<OmniState & OmniActions>((set, get, api) => {
 
     updateSettings(settings: { chatVerbosity?: ChatVerbosity; useSupervisor?: boolean; budget?: OmniState['budget'] }): void {
       get().sendCommand('updateSettings', settings as Record<string, unknown>);
+    },
+
+    loadSession(sessionId: string): void {
+      get().sendCommand('loadSession', { sessionId });
+    },
+
+    deleteSession(sessionId: string): void {
+      set((s) => ({
+        recentSessions: s.recentSessions.filter((sess) => sess.id !== sessionId),
+      }));
+      get().sendCommand('deleteSession', { sessionId });
     },
   };
 

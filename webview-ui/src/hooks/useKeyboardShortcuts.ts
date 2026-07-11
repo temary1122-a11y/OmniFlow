@@ -21,14 +21,6 @@ export function useKeyboardShortcuts(): void {
     const onKey = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
 
-      // Escape always fires (even while typing).
-      if (e.key === 'Escape') {
-        const { setSelectedAgent, setShowAgentDetail } = useOmniStore.getState();
-        setSelectedAgent(null);
-        setShowAgentDetail(false);
-        return;
-      }
-
       // Cmd/Ctrl combos always fire.
       if (mod && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
@@ -57,8 +49,6 @@ export function useKeyboardShortcuts(): void {
 
       if (e.key === 'c' || e.key === 'C') {
         useOmniStore.getState().setActiveTab('chat');
-      } else if (e.key === 'a' || e.key === 'A') {
-        useOmniStore.getState().setActiveTab('agents');
       }
     };
 

@@ -27,6 +27,90 @@ export class ResearchAgent extends LlmAgent {
   }
 
   /**
+   * Lightweight research entry point used OUTSIDE the build pipeline — e.g.
+   * when the orchestrator routes a "find the news" / live-web request from
+   * chat mode, or when another agent consults the researcher. It builds a
+   * minimal handoff contract and runs the SAME real research loop that owns
+   * the `web_search` tool (Exa/Tavily), so the agent answers from live web
+   * data rather than its training memory.
+   */
+  async runAdHocResearch(goal: string, workspaceRoot: string): Promise<ResearchReport> {
+    const taskId = `chat_research_${Date.now()}`;
+    const contract: HandoffContract = {
+      subtaskId: `research_${taskId}`,
+      agentRole: 'researcher',
+      successCriteria: ['Research report'],
+      artifactTargets: [{ filePath: `.omniflow/tasks/${taskId}/research-report.json`, contentType: 'doc' as any }],
+      contextPacket: {
+        taskId,
+        goal,
+        workspaceSnapshot: { fileTree: [], hasPackageJson: false, hasReadme: false, techStack: [] },
+      },
+    };
+    const manifest = await this.execute(contract, workspaceRoot);
+    const raw = manifest.artifacts[0]?.content ?? '';
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        taskId,
+        summary: parsed.summary ?? '(no summary)',
+        terms: parsed.terms ?? [],
+        bestPractices: parsed.bestPractices ?? [],
+        patterns: parsed.patterns ?? [],
+        sources: parsed.sources ?? [],
+      };
+    } catch {
+      return {
+        taskId,
+        summary: raw.slice(0, 600) || '(no result)',
+        terms: [],
+        bestPractices: [],
+        patterns: [],
+        sources: [],
+      };
+    }
+  }
+
+  /**
+   * When another agent consults the researcher, run REAL research (with web
+   * search) instead of a bare text reply — the researcher owns web search.
+   */
+  async respondToPrompt(prompt: string, context: any[]): Promise<any> {
+    if (this.requiresLiveWeb(prompt)) {
+      try {
+        const report = await this.runAdHocResearch(prompt, this.workspaceRootForAdHoc());
+        const sources = (report.sources ?? []).filter(Boolean);
+        const body =
+          report.summary +
+          (sources.length ? `\n\nSources:\n${sources.slice(0, 8).join('\n')}` : '');
+        return { content: body, confidence: 0.9, needsMoreInfo: false, metadata: { usedWebSearch: true } };
+      } catch {
+        // fall through to a plain text reply
+      }
+    }
+    return super.respondToPrompt(prompt, context);
+  }
+
+  /** Best-effort workspace root for ad-hoc (consult) calls. */
+  private workspaceRootForAdHoc(): string {
+    // AgentRuntime/execute need a workspace root; the research agent has no
+    // stored root, so derive one from cwd as a safe default.
+    return process.cwd();
+  }
+
+  private requiresLiveWeb(goal: string): boolean {
+    const g = goal.toLowerCase();
+    const liveSignals = [
+      'news', 'новост', 'сегодня', 'today', 'current', 'latest', 'recent', 'up-to-date', 'up to date',
+      'актуальн', 'последн', 'свеж', 'сейчас', 'right now', 'this week', 'this month', 'this year',
+      'этот год', 'цен', 'курс', 'price', 'prices', 'rate', 'rates', 'weather', 'погод',
+      'stock', 'stocks', 'trending', 'happening', 'происходит', 'find', 'search', 'look up', 'lookup',
+      'найди', 'поищ', 'узнай', 'выясни', 'google', 'what is the',
+    ];
+    return liveSignals.some((s) => g.includes(s));
+  }
+
+  /**
    * Real web search for the researcher. Uses Exa or Tavily REST APIs (global fetch)
    * when an API key is available. Gracefully returns empty results otherwise so the
    * agent falls back to its normal LLM-only behavior.
@@ -277,8 +361,6 @@ export class ResearchAgent extends LlmAgent {
         workspaceRoot,
         boundary: contract.boundary,
         onReasoning: (thought) => this.emitReasoning('research', thought),
-        onToolCall: (tool, args) => this.emitToolCall('research', tool, args),
-        onToolResult: (tool, result) => this.emitToolResult('research', tool, result.success, result.output, result.error),
         onIteration: (iteration, ctx) => {
           const urlCount = searchSession.seenUrls.size;
           if (urlCount >= 6) {

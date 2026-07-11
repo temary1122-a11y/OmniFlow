@@ -2,7 +2,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   MessageSquare,
-  Boxes,
   Folder,
   History,
   Settings,
@@ -10,10 +9,8 @@ import {
 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useOmniStore } from '@/store/omniStore';
-import { STATUS_LABELS, getAgentMeta, getStatusColor, CANONICAL_AGENT_ROLES } from '@/utils/agentConfig';
 import { cn } from '@/utils/cn';
 import { useTranslation } from '@/i18n';
-import type { AgentRole, AgentStatus } from '@/types';
 
 /**
  * Sidebar
@@ -24,11 +21,10 @@ import type { AgentRole, AgentStatus } from '@/types';
  * (collapse UX), re-implemented against the canonical v3 contract.
  */
 
-type Tab = 'chat' | 'agents' | 'files' | 'sessions' | 'settings';
+type Tab = 'chat' | 'files' | 'sessions' | 'settings';
 
 const NAV_ITEMS: { id: Tab; icon: typeof MessageSquare; label: string }[] = [
   { id: 'chat', icon: MessageSquare, label: 'Чат' },
-  { id: 'agents', icon: Boxes, label: 'Агенты' },
   { id: 'files', icon: Folder, label: 'Файлы' },
   { id: 'sessions', icon: History, label: 'Сессии' },
   { id: 'settings', icon: Settings, label: 'Настройки' },
@@ -54,21 +50,12 @@ export function Sidebar() {
   const { t } = useTranslation();
   const activeTab = useOmniStore((s) => s.activeTab);
   const setActiveTab = useOmniStore((s) => s.setActiveTab);
-  const agentStatuses = useOmniStore((s) => s.agentStatuses);
-  const selectedAgentId = useOmniStore((s) => s.selectedAgentId);
-  const setSelectedAgent = useOmniStore((s) => s.setSelectedAgent);
-  const setShowAgentDetail = useOmniStore((s) => s.setShowAgentDetail);
   const sidebarOpen = useOmniStore((s) => s.sidebarOpen);
   const setSidebarOpen = useOmniStore((s) => s.setSidebarOpen);
   const providerInfo = useOmniStore((s) => s.providerInfo);
   const modelCatalog = useOmniStore((s) => s.modelCatalog);
   const configureApi = useOmniStore((s) => s.configureApi);
   const selectModel = useOmniStore((s) => s.selectModel);
-
-  const openAgent = (role: AgentRole) => {
-    setSelectedAgent(role);
-    setShowAgentDetail(true);
-  };
 
   // ── Collapsed slim rail ──────────────────────────────────
   if (!sidebarOpen) {
@@ -118,51 +105,6 @@ export function Sidebar() {
         })}
 
         <div style={{ width: 24, height: 1, background: BORDER, margin: '4px 0' }} />
-
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 2 }}>
-          {CANONICAL_AGENT_ROLES.map((role) => {
-            const meta = getAgentMeta(role);
-            const status = agentStatuses[role] as AgentStatus;
-            const selected = selectedAgentId === role;
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => openAgent(role)}
-                title={`${meta.label} — ${STATUS_LABELS[status]}`}
-                aria-label={`${meta.label} ${STATUS_LABELS[status]}`}
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 28,
-                  height: 28,
-                  borderRadius: 8,
-                  fontSize: 15,
-                  cursor: 'pointer',
-                  color: meta.color,
-                  background: selected ? `${meta.color}22` : 'transparent',
-                  border: `1px solid ${selected ? meta.color : 'transparent'}`,
-                }}
-              >
-                <span>{meta.icon}</span>
-                <span
-                  style={{
-                    position: 'absolute',
-                    right: 1,
-                    bottom: 1,
-                    width: 7,
-                    height: 7,
-                    borderRadius: 9999,
-                    background: getStatusColor(status),
-                    border: '1px solid var(--vscode-sideBar-background, #0d1117)',
-                  }}
-                />
-              </button>
-            );
-          })}
-        </div>
       </div>
     );
   }
@@ -271,65 +213,6 @@ export function Sidebar() {
             );
           })}
         </nav>
-
-        {/* Agents subsection */}
-        <section style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={sectionLabelStyle}>{t('sidebar.agents')}</div>
-          {CANONICAL_AGENT_ROLES.map((role) => {
-            const meta = getAgentMeta(role);
-            const status = agentStatuses[role] as AgentStatus;
-            const selected = selectedAgentId === role;
-            return (
-              <button
-                key={role}
-                type="button"
-                onClick={() => openAgent(role)}
-                title={`${meta.label} — ${STATUS_LABELS[status]}`}
-                aria-label={`${meta.label} ${STATUS_LABELS[status]}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  width: '100%',
-                  textAlign: 'left',
-                  padding: '6px 8px',
-                  borderRadius: 'var(--radius-md, 8px)',
-                  cursor: 'pointer',
-                  color: FG,
-                  background: selected ? `${meta.color}1f` : 'transparent',
-                  border: `1px solid ${selected ? meta.color : 'transparent'}`,
-                }}
-              >
-                <span style={{ width: 18, textAlign: 'center', fontSize: 14, color: meta.color, flexShrink: 0 }}>
-                  {meta.icon}
-                </span>
-                <span
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: 12,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    color: selected ? meta.color : FG,
-                  }}
-                >
-                  {meta.label}
-                </span>
-                <span
-                  title={STATUS_LABELS[status]}
-                  style={{
-                    width: 8,
-                    height: 8,
-                    borderRadius: 9999,
-                    flexShrink: 0,
-                    background: getStatusColor(status),
-                  }}
-                />
-              </button>
-            );
-          })}
-        </section>
 
         {/* Providers subsection */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

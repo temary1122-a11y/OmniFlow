@@ -33,7 +33,7 @@ const CLASSIFY_SYSTEM = `You are the intent classifier for "Omni", an autonomous
 Given a user request, decide the SINGLE best routing intent.
 - "chat": the user is asking a question, wants an explanation, a concept, help, or a conversation. No files need to be created or changed. Examples: "who are you", "what is a closure", "explain this error", "how do promises work".
 - "code": the user wants something built, created, implemented, added, or changed in the workspace (a feature, script, file, app, component). Examples: "build a REST API", "create a button component", "add a logout button", "make a todo list app".
-- "research": the user wants investigation/analysis ONLY (no code changes), e.g. "research best practices for X", "analyze this codebase", "what libraries exist for Y".
+- "research": the user wants investigation/analysis ONLY (no code changes), OR wants CURRENT/LIVE information from the web that must be looked up fresh (news, latest/current events, today's updates, recent prices/rates/weather, "find out", "look up", "search for"). Examples: "research best practices for X", "analyze this codebase", "what libraries exist for Y", "find today's news", "what are the latest AI models", "look up the current price of X". The researcher agent owns web search (Exa/Tavily) — route any request that needs up-to-date web data here, even in chat mode.
 - "debug": something is broken and must be diagnosed/fixed. Examples: "login is broken", "fix the crash on startup".
 - "refactor": improve existing code structure without changing behavior. Examples: "refactor the auth module", "clean up the utils".
 - "migrate": move code/stack from one to another. Examples: "migrate to TypeScript", "port this to Python".
@@ -51,7 +51,6 @@ export class IntentRouter {
   ) {}
 
   async classify(rawGoal: string, opts: { mode?: string; workspaceRoot?: string } = {}): Promise<IntentDecision> {
-    const modeHint = opts.mode;
     const prompt =
       `USER REQUEST:\n"""\n${rawGoal}\n"""\n\n` +
       `Classify the intent of this request. If it is a build/code task, also provide a brief ` +
@@ -68,10 +67,13 @@ export class IntentRouter {
       if (parsed && typeof parsed.intent === 'string') {
         const intent = this.normalizeIntent(parsed.intent);
 
-        // Honor an explicit UI choice of chat/ask (the user told us the mode).
-        // Otherwise trust the LLM, which has read the actual request.
-        if ((modeHint === 'chat' || modeHint === 'ask') && intent !== 'chat' && intent !== 'ask') {
-          return this.decision('chat', 1, `User explicitly selected ${modeHint} mode`, false, true);
+        // Single default mode: the LLM chooses the path (chat / research / code)
+        // for EVERY message — we never force a 'chat' mode here. The only
+        // override is live/current web data, which always belongs to the
+        // researcher's web_search tooling, not a chat answer.
+        const needsWeb = this.requiresLiveWeb(rawGoal);
+        if ((intent === 'chat' || intent === 'ask') && needsWeb) {
+          return this.decision('research', 0.95, 'Request needs current/live web info → researcher (web search)', false, false);
         }
 
         const requiresBuild =
@@ -92,7 +94,24 @@ export class IntentRouter {
       // LLM unavailable (e.g. rate-limited / no key) — fall back to heuristics.
     }
 
-    return this.heuristic(rawGoal, modeHint);
+    return this.heuristic(rawGoal);
+  }
+
+  /**
+   * Heuristic: does this request need CURRENT/LIVE web data that must be
+   * looked up fresh (and therefore belongs to the researcher's web_search
+   * tooling, not the chat agent's training knowledge)?
+   */
+  requiresLiveWeb(goal: string): boolean {
+    const g = goal.toLowerCase();
+    const liveSignals = [
+      'news', 'новост', 'сегодня', 'today', 'current', 'latest', 'recent', 'up-to-date', 'up to date',
+      'актуальн', 'последн', 'свеж', 'сейчас', 'right now', 'this week', 'this month', 'this year',
+      'эта недел', 'этот год', 'цен', 'курс', 'price', 'prices', 'rate', 'rates', 'weather', 'погод',
+      'stock', 'stocks', 'trending', 'happening', 'происходит', 'find', 'search', 'look up', 'lookup',
+      'найди', 'поищ', 'узнай', 'выясни', 'google', 'what is the', 'кто сейчас', 'что сейчас',
+    ];
+    return liveSignals.some((s) => g.includes(s));
   }
 
   private normalizeIntent(s: string): OmniIntent {
@@ -107,12 +126,13 @@ export class IntentRouter {
   }
 
   /** Local fallback so the harness still routes sensibly when the LLM is down. */
-  private heuristic(goal: string, modeHint?: string): IntentDecision {
-    if (modeHint === 'chat' || modeHint === 'ask') {
-      return this.decision('chat', 0.9, 'UI mode hint = chat/ask', false, true);
-    }
-
+  private heuristic(goal: string): IntentDecision {
     const g = goal.toLowerCase().trim();
+
+    // Anything asking for live/current web data belongs to the researcher.
+    if (this.requiresLiveWeb(g)) {
+      return this.decision('research', 0.85, 'Live/current web data requested → researcher', false, true);
+    }
 
     // Direct questions usually want an answer, not a file — unless they also
     // carry an imperative build verb ("how do I build a bot").
@@ -122,6 +142,9 @@ export class IntentRouter {
     if (isQuestion) {
       if (/\b(build|create|make|implement|write|generate|develop|code|скрипт|напиши|создай|сделай|реализуй|построй)\b/.test(g)) {
         return this.decision('code', 0.8, 'Question containing a build verb → code', true, true);
+      }
+      if (this.requiresLiveWeb(g)) {
+        return this.decision('research', 0.85, 'Question needs live/current web data → researcher', false, true);
       }
       return this.decision('chat', 0.85, 'Question without build intent → chat', false, true);
     }
@@ -139,9 +162,10 @@ export class IntentRouter {
       return this.decision('migrate', 0.8, 'Migrate verb → migrate', true, true);
     }
 
-    // Default: the harness's primary purpose is building, so assume code with
-    // low confidence (easy to correct on the next turn).
-    return this.decision('code', 0.5, 'No clear signal — defaulting to code', true, true);
+    // Default: a request with no clear build/research/migrate signal is most
+    // likely a conversation or question — answer directly instead of forcing a
+    // build pipeline that would have nothing to produce (and fail verification).
+    return this.decision('chat', 0.5, 'No clear signal — defaulting to chat', false, true);
   }
 
   private decision(

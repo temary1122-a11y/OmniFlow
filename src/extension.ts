@@ -116,10 +116,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           console.log('[extension.ts] Goal confirmed:', goal);
           notifyChat(bridge, 'system', `Omni received your task: "${goal}". Starting orchestration…`);
           const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-          const isChat = mode === 'chat' || mode === 'ask';
-          if (!root && !isChat) {
-            fail('No workspace folder is open. Open a folder (File → Open Folder) and run the task again.', 'intake');
-            return;
+          // Single unified mode: the orchestrator's IntentRouter decides the
+          // path (chat / research / code) per message, so we no longer branch on
+          // a forced UI mode here. A pure question works without an open folder;
+          // a build intent that truly needs the workspace will surface a clear
+          // error inside the pipeline if no folder is open.
+          if (!root) {
+            notifyChat(bridge, 'system', 'No workspace folder is open — chat/research will still work; a build task may be limited.');
           }
           log.appendLine(`[Omni] start goal=${goal}`);
           try {
@@ -162,6 +165,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           log.appendLine(`[Omni] start command error: ${msg}`);
           if (err instanceof Error && err.stack) log.appendLine(err.stack);
           fail(`Start error: ${msg}`, 'intake');
+        }
+      }),
+
+      vscode.commands.registerCommand('omni.continueChat', async (goal?: string) => {
+        console.log('[extension.ts] omni.continueChat COMMAND CALLED with goal:', goal);
+        log.appendLine(`[Omni] continueChat goal=${goal ?? '<none>'}`);
+        const fail = (msg: string) => {
+          notifyError(bridge, msg, 'chat');
+          vscode.window.showErrorMessage(`Omni: ${msg}`);
+        };
+        try {
+          if (!goal) return;
+          try {
+            OmniPanel.createOrShow(bridge);
+          } catch (e) {
+            fail(`Failed to open Omni Cockpit: ${e instanceof Error ? e.message : e}`);
+            return;
+          }
+          const existing = getOrchestrator();
+          if (existing && existing.isCurrentlyRunning()) {
+            log.appendLine('[Omni] continueChat ignored — orchestration already running');
+            return;
+          }
+          const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          const orch = existing ?? new OmniOrchestrator(root ?? '');
+          if (!existing) {
+            orch.setWebviewBridge(bridge);
+            setOrchestrator(orch);
+          }
+          log.appendLine(`[Omni] orch.continueChat...`);
+          await vscode.window.withProgress(
+            { location: vscode.ProgressLocation.Notification, title: 'Omni Chat', cancellable: false },
+            async () => {
+              try {
+                await orch.continueChat(goal);
+                vscode.window.showInformationMessage('Omni: Response complete!');
+              } catch (e) {
+                const msg = e instanceof Error ? e.message : String(e);
+                log.appendLine(`[Omni] continueChat failed: ${msg}`);
+                fail(`Chat failed: ${msg}`);
+              }
+            }
+          );
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          log.appendLine(`[Omni] continueChat error: ${msg}`);
+          fail(`Chat error: ${msg}`);
         }
       }),
       

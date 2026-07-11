@@ -14,6 +14,7 @@ import { ToolCard } from '@/components/tools/ToolCard';
 import { ClarifyingQuestions } from './ClarifyingQuestions';
 import { ApprovalCard } from './ApprovalCard';
 import { DeliveryCard } from './DeliveryCard';
+import { OmniLogo } from '@/components/common/OmniLogo';
 
 function AgentConsult({ part }: { part: Extract<MessagePart, { type: 'agent_consult' }> }) {
   const toMeta = getAgentMeta(part.to);
@@ -107,7 +108,6 @@ function renderPart(part: MessagePart, key: number): ReactNode {
     case 'reasoning':
       return <ReasoningBlock key={key} content={part.content} agentId={part.agentId} phase={part.phase} stream />;
     case 'tool_call':
-    case 'tool_result':
       return <ToolCard key={key} part={part} />;
     case 'code':
       return <CodeBlock key={key} code={part.code} language={part.language} showCopy />;
@@ -213,13 +213,14 @@ function HeaderMeta({ message }: { message: Message }) {
   }
   const key: AgentRole = message.agentId ?? 'orchestrator';
   const meta = getAgentMeta(key);
-  return { icon: meta.icon, label: meta.label, color: meta.color };
+  return { icon: meta.icon, label: meta.label, color: meta.color, isOmni: meta.isOmni ?? false };
 }
 
 function ChatRowBase({ message }: { message: Message }) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const meta = HeaderMeta({ message });
+  const showOmniLogo = meta.isOmni;
   const timeStr = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
   if (message.role === 'user') {
@@ -295,7 +296,7 @@ function ChatRowBase({ message }: { message: Message }) {
           color: meta.color,
         }}
       >
-        {meta.icon}
+        {showOmniLogo ? <OmniLogo size={14} color={meta.color} /> : meta.icon}
       </div>
 
       <div style={{ minWidth: 0, flex: 1 }}>

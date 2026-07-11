@@ -104,32 +104,38 @@ export class ToolRegistry {
   }
 
   async execute(name: string, args: any, context: ToolContext): Promise<ToolResult> {
+    // Stable id shared by the CALL + RESULT pair so the UI can match them
+    // into a single card (previously the timestamps drifted and the result got
+    // orphaned, while a second emitter duplicated the card).
+    const callId = crypto.randomUUID();
+    const emit = (result: ToolResult): ToolResult => {
+      this.emitToolCall(context, name, args, Date.now(), callId);
+      this.emitToolResult(context, name, result, callId);
+      return result;
+    };
+
     const tool = this.tools.get(name);
     if (!tool) {
-      const errorResult: ToolResult = {
+      return emit({
         success: false,
         error: `Unknown tool: ${name}`,
         durationMs: 0,
-      };
-      this.emitToolResult(context, name, errorResult);
-      return errorResult;
+      });
     }
 
     // Check cache if enabled
     if (this.enableCaching && this.shouldCacheTool(name)) {
       const cached = this.resultCache.get(name, args);
       if (cached) {
-        const cachedResult: ToolResult = {
+        return emit({
           ...cached,
           durationMs: 0, // Cached results are instant
-        };
-        this.emitToolResult(context, name, cachedResult);
-        return cachedResult;
+        });
       }
     }
 
     const startTime = Date.now();
-    this.emitToolCall(context, name, args, startTime);
+    this.emitToolCall(context, name, args, startTime, callId);
 
     try {
       const result = await tool.executor(args, context);
@@ -146,7 +152,7 @@ export class ToolRegistry {
         this.resultCache.invalidateByFile(args.path);
       }
 
-      this.emitToolResult(context, name, toolResult);
+      this.emitToolResult(context, name, toolResult, callId);
       return toolResult;
     } catch (error: any) {
       const durationMs = Date.now() - startTime;
@@ -155,7 +161,7 @@ export class ToolRegistry {
         error: error.message || 'Tool execution failed',
         durationMs,
       };
-      this.emitToolResult(context, name, errorResult);
+      this.emitToolResult(context, name, errorResult, callId);
       return errorResult;
     }
   }
@@ -171,7 +177,7 @@ export class ToolRegistry {
     }));
   }
 
-  private emitToolCall(context: ToolContext, tool: string, args: any, timestamp: number): void {
+  private emitToolCall(context: ToolContext, tool: string, args: any, timestamp: number, callId: string): void {
     const event = {
       type: 'TOOL_CALL' as const,
       payload: {
@@ -179,12 +185,13 @@ export class ToolRegistry {
         toolName: tool,
         args,
         timestamp,
+        callId,
       },
     };
     this.eventBus.emit(event as IpcMessage);
   }
 
-  private emitToolResult(context: ToolContext, tool: string, result: ToolResult): void {
+  private emitToolResult(context: ToolContext, tool: string, result: ToolResult, callId: string): void {
     const event = {
       type: 'TOOL_RESULT' as const,
       payload: {
@@ -194,6 +201,7 @@ export class ToolRegistry {
         output: typeof result.output === 'string' ? result.output : JSON.stringify(result.output),
         error: result.error,
         timestamp: Date.now(),
+        callId,
       },
     };
     this.eventBus.emit(event as IpcMessage);

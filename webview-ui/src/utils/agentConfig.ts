@@ -12,11 +12,12 @@ export const CANONICAL_AGENT_ROLES = [
   'verifier',
 ] as const satisfies readonly AgentRole[];
 
-export const AGENT_META: Record<AgentRole, { label: string; color: string; icon: string; description: string }> = {
+export const AGENT_META: Record<AgentRole, { label: string; color: string; icon: string; description: string; isOmni?: boolean }> = {
   orchestrator: {
-    label: 'Orchestrator',
+    label: 'Omni',
     color: '#7c6af7',
     icon: '⬡',
+    isOmni: true,
     description: 'Главный координатор, управляющий полным жизненным циклом оркестрации',
   },
   clarifier: {
@@ -81,7 +82,7 @@ export const AGENT_META: Record<AgentRole, { label: string; color: string; icon:
   },
 };
 
-type AgentMeta = { label: string; color: string; icon: string; description: string };
+type AgentMeta = { label: string; color: string; icon: string; description: string; isOmni?: boolean };
 
 const FALLBACK_AGENT: AgentMeta = {
   label: 'Agent',

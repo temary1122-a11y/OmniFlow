@@ -56,7 +56,6 @@ import type {
   Phase,
   AgentRole,
   AgentStatus,
-  AgentGraphNode,
   AgentGraphEdge,
   ClarifyingAnswer,
   ClarifyingQuestion,
@@ -72,28 +71,6 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 
 type QuestionResolver = (answers: unknown) => void;
-
-const AGENT_LAYOUT: Record<string, { x: number; y: number }> = {
-  orchestrator: { x: 400, y: 40 },
-  clarifier: { x: 120, y: 140 },
-  researcher: { x: 280, y: 140 },
-  planner: { x: 520, y: 140 },
-  coder: { x: 200, y: 280 },
-  auditor: { x: 400, y: 280 },
-  security: { x: 600, y: 280 },
-  verifier: { x: 400, y: 400 },
-};
-
-const PIPELINE_EDGES: AgentGraphEdge[] = [
-  { id: 'e1', source: 'orchestrator', target: 'clarifier', animated: true },
-  { id: 'e2', source: 'clarifier', target: 'researcher', animated: true },
-  { id: 'e3', source: 'researcher', target: 'planner', animated: true },
-  { id: 'e4', source: 'planner', target: 'coder', animated: true },
-  { id: 'e5', source: 'coder', target: 'auditor', animated: true },
-  { id: 'e6', source: 'auditor', target: 'security', animated: true },
-  { id: 'e7', source: 'security', target: 'verifier', animated: true },
-  { id: 'e8', source: 'verifier', target: 'orchestrator', animated: true },
-];
 
 interface ApiKeyPromptResponse {
   requestId: string;
@@ -302,7 +279,6 @@ export class OmniOrchestrator {
         target: p.to,
         animated: true,
       });
-      this.pushGraph();
     });
   }
 
@@ -560,7 +536,24 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
     return this.pendingQuestions;
   }
 
-  async start(rawGoal: string, mode?: string): Promise<DeliveryReport> {
+  /**
+   * Single unified entry point for EVERY message — first turn AND follow-ups.
+   *
+   * There is exactly ONE default mode. The orchestrator, acting as an LLM, runs
+   * intent routing (IntentRouter) with NO forced mode and dispatches to the
+   * right agent for that single turn:
+   *   - simple question (chat/ask)      → answer directly with the FULL tool set
+   *   - needs fresh/current info (research) → researcher agent (web_search)
+   *   - needs code (code/debug/refactor/migrate) → coder (+ verifier/tester)
+   *
+   * `start` and `continueChat` both converge here; the only difference is
+   * whether the session is booted fresh (`first: true`) or we reuse the already
+   * running session context for a follow-up turn (`first: false`). The
+   * orchestrator re-chooses the agent on every turn — there is no separate
+   * read-only "basic chat mode".
+   */
+  async runUnified(rawGoal: string, opts: { first?: boolean } = {}): Promise<DeliveryReport> {
+    const first = opts.first ?? true;
     if (this.isRunning) throw new Error('Orchestrator already running');
     if (OmniOrchestrator.activeInstance && OmniOrchestrator.activeInstance.isRunning) {
       throw new Error('Another Omni orchestration is already running');
@@ -568,9 +561,62 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
     this.isRunning = true;
     OmniOrchestrator.activeInstance = this;
     this.cancelRequested = false;
+    this.startTime = Date.now();
+
+    this.chat('user', rawGoal);
+
+    // Boot a fresh session only on the first turn. Follow-ups reuse the existing
+    // orchestration context (memory, spawned agents, graph) and just get routed.
+    if (first) {
+      this.bootSession(rawGoal);
+    }
+    this.emitStateUpdate();
+
+    // ── LLM-first intent routing (single point, no forced mode) ──────────────
+    this.chat('system', 'Evaluating your request (LLM intent routing)…');
+    const decision: IntentDecision = await this.intentRouter.classify(rawGoal, {
+      workspaceRoot: this.workspaceRoot,
+    });
+    this.chat(
+      'system',
+      `Intent → ${decision.intent} (confidence ${decision.confidence.toFixed(2)}` +
+        `${decision.heuristic ? ', heuristic fallback' : ''}). ${decision.reasoning}`
+    );
+
+    const BUILD_INTENTS = new Set<OmniIntent>(['code', 'debug', 'refactor', 'migrate']);
+    const isBuild = BUILD_INTENTS.has(decision.intent) || (decision.intent === 'unknown' && decision.requiresBuild);
+
+    try {
+      // Needs fresh/current web data → researcher owns web_search.
+      if (decision.intent === 'research') {
+        return await this.runResearchChat(rawGoal);
+      }
+      // Simple question → answer directly with the FULL tool set (no read-only-only
+      // basic mode, no separate chat-agent path).
+      if (!isBuild) {
+        return await this.runDirectAnswer(rawGoal, decision);
+      }
+      // Needs code → coder (+ audit / security / verifier via the build loop).
+      return await this.runBuildPipeline(rawGoal, first);
+    } catch (err) {
+      this.setAgent('orchestrator', 'error', String(err));
+      this.eventBus.emit({
+        type: 'ERROR_OCCURRED',
+        payload: { error: err instanceof Error ? err.message : String(err), phase: this.phaseEngine.getCurrentPhase(), recoverable: false },
+      });
+      throw err;
+    } finally {
+      this.sharedMemory.flushToDisk(true);
+      this.isRunning = false;
+      this.emitStateUpdate();
+      OmniOrchestrator.activeInstance = null;
+    }
+  }
+
+  /** Boot a fresh orchestration session (reset state, config, compass, workspace). */
+  private bootSession(rawGoal: string): void {
     this.spawnedAgents = new Set<AgentRole>(['orchestrator']);
     this.runtimeEdges = [];
-    this.startTime = Date.now();
     this.phaseEngine.reset();
     this.memory.clear();
     // Phase 3: clear enrichment cache for fresh run
@@ -587,151 +633,129 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
     TaskCompass.setSharedInstance(this.taskCompass);
 
     this.chat('system', `Starting Omni orchestration on ${CrossPlatformShell.platformInfo()}`);
-    this.chat('user', rawGoal);
+  }
 
-    // ── LLM-first intent routing ───────────────────────────────────────────
-    // The LLM evaluates the request FIRST and decides the path. This is the
-    // model-driven loop pattern used by Claude Code / Codex / Devin / Kilo:
-    // the harness does not assume a build — the model reads the prompt and
-    // chooses (e.g. answer directly vs. run the builder). The previous code
-    // hardcoded `intent: 'build'`, so even "who are you" spawned coders.
-    this.chat('system', 'Evaluating your request (LLM intent routing)…');
-    const decision: IntentDecision = await this.intentRouter.classify(rawGoal, {
-      mode,
-      workspaceRoot: this.workspaceRoot,
+  /** Full build pipeline for code/debug/refactor/migrate intents (first OR follow-up). */
+  private async runBuildPipeline(rawGoal: string, _first: boolean): Promise<DeliveryReport> {
+ // Initialize pipeline context with minimal data (will be populated by intakePhase)
+    const taskId = `task_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const pipelineCtx = createPipelineContext({
+      taskId,
+      rawGoal,
+      workspace: { fileTree: [], hasPackageJson: false, hasReadme: false, techStack: [] },
+      goalPacket: {
+        taskId,
+        goal: rawGoal,
+        intent: 'build',
+        complexity: 'low',
+        workspaceSnapshot: { fileTree: [], hasPackageJson: false, hasReadme: false, techStack: [] },
+      },
+      tier: 'LOW',
+      phases: ['intake'], // Start with just intake, will update after intake phase
     });
-    this.chat(
-      'system',
-      `Intent → ${decision.intent} (confidence ${decision.confidence.toFixed(2)}` +
-        `${decision.heuristic ? ', heuristic fallback' : ''}). ${decision.reasoning}`
-    );
+    pipelineCtx.startedAt = this.startTime;
 
-    const BUILD_INTENTS = new Set<OmniIntent>(['code', 'debug', 'refactor', 'migrate']);
-    const isBuild = BUILD_INTENTS.has(decision.intent) || (decision.intent === 'unknown' && decision.requiresBuild);
+    const pipelineHost = this.createPipelineHost();
+    const pipelineServices = this.createPipelineServices();
 
-    // Non-build intents (chat / ask / research-without-build / unknown-no-build)
-    // are answered directly — no coder, no build/verify loop.
-    if (!isBuild) {
-      return await this.runChatMode(rawGoal, decision);
+ // INTAKE: scan workspace, bootstrap docs, create goal packet, triage
+    this.assertNotCancelled();
+    await this.waitWhilePaused();
+    await intakePhase.run(pipelineHost, pipelineCtx, pipelineServices);
+    this.currentTier = pipelineCtx.tier;
+
+    // DYNAMIC PHASE SELECTION: Use RoleSelector to determine which phases to run
+    const roleSelector = new RoleSelector();
+    const roleSelection = roleSelector.select(pipelineCtx.goalPacket.goal, pipelineCtx.goalPacket.complexity);
+
+    // Update the pipeline context with the dynamically determined tier and self-prompting flag
+    pipelineCtx.tier = roleSelection.tier;
+    pipelineCtx.useSelfPrompting = roleSelection.useSelfPrompting;
+
+    // Build the complete phases array based on role selection
+    // Start with intake (already completed), then add selected phases, then deliver (always last)
+    const phasesToRun: Phase[] = ['intake'];
+
+    // Add phases from role selection (these come from the ROLE_TO_PHASE mapping in RoleSelector)
+    phasesToRun.push(...roleSelection.phases);
+
+    // Add self-prompt phase if indicated by role selection
+    if (roleSelection.useSelfPrompting) {
+      phasesToRun.push('self-prompt');
     }
 
-    try {
-// Initialize pipeline context with minimal data (will be populated by intakePhase)
-       const taskId = `task_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-       const pipelineCtx = createPipelineContext({
-         taskId,
-         rawGoal,
-         workspace: { fileTree: [], hasPackageJson: false, hasReadme: false, techStack: [] },
-         goalPacket: {
-           taskId,
-           goal: rawGoal,
-           intent: 'build',
-           complexity: 'low',
-           workspaceSnapshot: { fileTree: [], hasPackageJson: false, hasReadme: false, techStack: [] },
-         },
-         tier: 'LOW',
-         phases: ['intake'], // Start with just intake, will update after intake phase
-       });
-       pipelineCtx.startedAt = this.startTime;
+    // Always end with deliver
+    phasesToRun.push('deliver');
 
-       const pipelineHost = this.createPipelineHost();
-       const pipelineServices = this.createPipelineServices();
+    // Update the pipeline context with the final phases list
+    pipelineCtx.phases = phasesToRun;
 
-// INTAKE: scan workspace, bootstrap docs, create goal packet, triage
-       this.assertNotCancelled();
-       await this.waitWhilePaused();
-       await intakePhase.run(pipelineHost, pipelineCtx, pipelineServices);
-       this.currentTier = pipelineCtx.tier;
+    // Create phase instance map for easy lookup
+    const phaseInstances: Record<string, any> = {
+      research: researchPhase,
+      'self-prompt': selfPromptPhase,
+      planning: planningPhase,
+      'context-enrich': contextEnrichPhase,
+      deliver: deliverPhase,
+    };
 
-      // DYNAMIC PHASE SELECTION: Use RoleSelector to determine which phases to run
-      const roleSelector = new RoleSelector();
-      const roleSelection = roleSelector.select(pipelineCtx.goalPacket.goal, pipelineCtx.goalPacket.complexity);
-      
-      // Update the pipeline context with the dynamically determined tier and self-prompting flag
-      pipelineCtx.tier = roleSelection.tier;
-      pipelineCtx.useSelfPrompting = roleSelection.useSelfPrompting;
-      
-      // Build the complete phases array based on role selection
-      // Start with intake (already completed), then add selected phases, then deliver (always last)
-      const phasesToRun: Phase[] = ['intake'];
-      
-      // Add phases from role selection (these come from the ROLE_TO_PHASE mapping in RoleSelector)
-      phasesToRun.push(...roleSelection.phases);
-      
-      // Add self-prompt phase if indicated by role selection
-      if (roleSelection.useSelfPrompting) {
-        phasesToRun.push('self-prompt');
-      }
-      
-      // Always end with deliver
-      phasesToRun.push('deliver');
-      
-      // Update the pipeline context with the final phases list
-      pipelineCtx.phases = phasesToRun;
+    // Execute phases in order (skipping intake as it's already done)
+    for (const phaseId of phasesToRun) {
+      // Skip intake as we already ran it
+      if (phaseId === 'intake') continue;
 
-      // Create phase instance map for easy lookup
-      const phaseInstances: Record<string, any> = {
-        research: researchPhase,
-        'self-prompt': selfPromptPhase,
-        planning: planningPhase,
-        'context-enrich': contextEnrichPhase,
-        deliver: deliverPhase
-      };
-
-      // Execute phases in order (skipping intake as it's already done)
-      for (const phaseId of phasesToRun) {
-        // Skip intake as we already ran it
-        if (phaseId === 'intake') continue;
-
-        this.assertNotCancelled();
-        await this.waitWhilePaused();
-
-        // Handle build/audit/security/verify phases together via runBuildVerifyLoop
-        if (['build', 'audit', 'security', 'verify'].includes(phaseId)) {
-          // We'll handle all build-related phases together in one go
-          continue;
-        }
-
-        // Handle standard phases
-        const phaseInstance = phaseInstances[phaseId];
-        if (phaseInstance) {
-          await phaseInstance.run(pipelineHost, pipelineCtx, pipelineServices);
-        }
-      }
-
-      // BUILD → AUDIT → SECURITY → VERIFY (with retry loop)
-      // Check if any of these phases are selected
-      const buildRelatedPhases: Phase[] = ['build', 'audit', 'security', 'verify'];
-      const shouldRunBuildPhase = buildRelatedPhases.some((phase): phase is Phase => phasesToRun.includes(phase));
-      if (shouldRunBuildPhase) {
-        this.assertNotCancelled();
-        await this.waitWhilePaused();
-        await runBuildVerifyLoop(pipelineHost, pipelineCtx, pipelineServices, {
-          maxRetries: 3,
-          onBeforeRetry: () => this.initAgentStatuses(),
-        });
-      }
-
-      // DELIVER: Always run the deliver phase to wrap up
       this.assertNotCancelled();
       await this.waitWhilePaused();
-      const deliverOutcome = await deliverPhase.run(pipelineHost, pipelineCtx, pipelineServices);
-      if (!deliverOutcome.report) {
-        throw new Error('Deliver phase did not produce a report');
+
+      // Handle build/audit/security/verify phases together via runBuildVerifyLoop
+      if (['build', 'audit', 'security', 'verify'].includes(phaseId)) {
+        // We'll handle all build-related phases together in one go
+        continue;
       }
-      return deliverOutcome.report;
-    } catch (err) {
-      this.setAgent('orchestrator', 'error', String(err));
-      this.eventBus.emit({
-        type: 'ERROR_OCCURRED',
-        payload: { error: err instanceof Error ? err.message : String(err), phase: this.phaseEngine.getCurrentPhase(), recoverable: false },
-      });
-      throw err;
-    } finally {
-      this.sharedMemory.flushToDisk(true);
-      this.isRunning = false;
-      OmniOrchestrator.activeInstance = null;
+
+      // Handle standard phases
+      const phaseInstance = phaseInstances[phaseId];
+      if (phaseInstance) {
+        await phaseInstance.run(pipelineHost, pipelineCtx, pipelineServices);
+      }
     }
+
+    // BUILD → AUDIT → SECURITY → VERIFY (with retry loop)
+    // Check if any of these phases are selected
+    const buildRelatedPhases: Phase[] = ['build', 'audit', 'security', 'verify'];
+    const shouldRunBuildPhase = buildRelatedPhases.some((phase): phase is Phase => phasesToRun.includes(phase));
+    if (shouldRunBuildPhase) {
+      this.assertNotCancelled();
+      await this.waitWhilePaused();
+      await runBuildVerifyLoop(pipelineHost, pipelineCtx, pipelineServices, {
+        maxRetries: 3,
+        onBeforeRetry: () => this.initAgentStatuses(),
+      });
+    }
+
+    // Safety net: if the build produced no artifacts (e.g. all coders stalled,
+    // providers were unavailable, or the request wasn't really a build task),
+    // don't burn verification retries and report a misleading FAIL. Fall back to
+    // a direct conversational answer instead.
+    if (pipelineCtx.artifacts.length === 0) {
+      this.chat('system', 'Build produced no artifacts — falling back to a direct answer.');
+      return await this.runDirectAnswer(rawGoal, undefined as unknown as IntentDecision);
+    }
+
+    // DELIVER: Always run the deliver phase to wrap up
+    this.assertNotCancelled();
+    await this.waitWhilePaused();
+    const deliverOutcome = await deliverPhase.run(pipelineHost, pipelineCtx, pipelineServices);
+    if (!deliverOutcome.report) {
+      throw new Error('Deliver phase did not produce a report');
+    }
+    return deliverOutcome.report;
+  }
+
+  /** Thin wrappers: a single default mode. `start` boots a fresh session; */
+  // `continueChat` routes a follow-up turn through the same unified path.
+  async start(rawGoal: string, _mode?: string): Promise<DeliveryReport> {
+    return this.runUnified(rawGoal, { first: true });
   }
 
   private route(taskId: string, goalPacket: UserGoalPacket) {
@@ -741,14 +765,20 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
   }
 
   /**
-   * Direct-answer path for non-build intents (chat / ask / research questions).
-   * Runs a READ-ONLY model-driven loop (ChatAgent) so the LLM can still inspect
-   * the workspace if helpful, but never enters the coder/build/verify pipeline.
+   * Direct-answer path for non-build, non-research intents (chat / ask /
+   * unknown-without-build). The orchestrator answers directly using the
+   * ChatAgent, which now carries the FULL tool set (not read-only-only), so a
+   * simple question can still inspect the workspace or even produce a file when
+   * the user explicitly asks — but it never enters the coder/build/verify loop.
    */
-  private async runChatMode(goal: string, decision: IntentDecision): Promise<DeliveryReport> {
+  private async runDirectAnswer(goal: string, _decision: IntentDecision): Promise<DeliveryReport> {
     const taskId = `chat_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
-    this.setAgent('chat' as AgentRole, 'working', 'Answering in chat mode');
-    this.chat('system', 'Chat mode — answering directly (no build pipeline).');
+
+    // Requests needing live/current web data are routed to the researcher
+    // (web_search) BEFORE reaching here (see runUnified), so we never answer
+    // stale. The ChatAgent itself also has the full tool set available.
+    this.setAgent('chat' as AgentRole, 'working', 'Answering directly (full tool set)');
+    this.chat('system', 'Direct answer — answering with the full tool set (no build pipeline).');
     try {
       const answer = await this.chatAgent.answer(goal, this.workspaceRoot);
       this.chat('assistant', answer);
@@ -764,7 +794,7 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
       };
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      this.chat('system', `Chat failed: ${msg}`);
+      this.chat('system', `Direct answer failed: ${msg}`);
       this.setAgent('chat' as AgentRole, 'error', msg);
       return {
         taskId,
@@ -773,9 +803,101 @@ async requestApiKeyPrompt(payload: { tools: { toolName: string; envVar: string; 
         durationMs: Date.now() - this.startTime,
         ledgerPath: '',
         runInstructions: '',
-        summary: `Chat mode failed: ${msg}`,
+        summary: `Direct answer failed: ${msg}`,
       };
     }
+  }
+
+  /**
+   * Chat-mode path for research / live-web requests. Runs the researcher
+   * agent's REAL research loop (which owns the `web_search` tool). If the
+   * researcher is missing its Exa/Tavily API key, immediately offers the user
+   * a secret key dialog in chat (with a direct signup link) before proceeding.
+   */
+  private async runResearchChat(goal: string): Promise<DeliveryReport> {
+    const taskId = `chat_research_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    this.setAgent('researcher' as AgentRole, 'working', 'Researching live web…');
+    this.chat('system', 'Research mode — the researcher agent will search the live web for you.');
+
+    try {
+      // 1) Detect missing search API keys and, if any, prompt the user
+      //    (secret dialog in chat with a direct signup link).
+      const missing = this.getMissingSearchTools();
+      if (missing.length > 0) {
+        const decision = await this.requestApiKeyPrompt({
+          tools: missing.map((t) => ({
+            toolName: t.name,
+            envVar: t.apiKeyEnv!,
+            signupUrl: t.signupUrl!,
+          })),
+          fallbackAvailable: true,
+          reason:
+            'The researcher needs a web-search API key to ground the answer in real, current sources. ' +
+            'Paste a key (private — never shown to the model), continue with a keyless fallback, or skip web search.',
+        });
+
+        if (decision.action === 'proceed' && decision.keys) {
+          for (const [envVar, value] of Object.entries(decision.keys)) {
+            if (value) await ConfigManager.setToolApiKey(envVar, value);
+          }
+          this.refreshConfig();
+          this.researcher.setApiKeys(this.apiKeys);
+          this.chat('system', '🔑 API key received — running live web search.');
+        } else if (decision.action === 'fallback') {
+          this.researcher.setSearchMode('fallback');
+          this.chat('system', '⚠ No key — using keyless fallback web search (may be unreliable).');
+        } else {
+          this.researcher.setSearchMode('skip');
+          this.chat('system', '⚠ Web search skipped — answering without live sources.');
+        }
+      }
+
+      // 2) Run the researcher's real research loop with web_search available.
+      const report = await this.researcher.runAdHocResearch(goal, this.workspaceRoot);
+
+      const sources = (report.sources ?? []).filter(Boolean);
+      const summary =
+        report.summary +
+        (sources.length ? `\n\nSources:\n${sources.slice(0, 8).join('\n')}` : '');
+
+      this.chat('assistant', summary);
+      this.setAgent('researcher' as AgentRole, 'done', 'Research complete');
+      return {
+        taskId,
+        artifacts: [],
+        verdict: 'PASS',
+        durationMs: Date.now() - this.startTime,
+        ledgerPath: '',
+        runInstructions: '',
+        summary,
+      };
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      this.chat('system', `Research failed: ${msg}`);
+      this.setAgent('researcher' as AgentRole, 'error', msg);
+      return {
+        taskId,
+        artifacts: [],
+        verdict: 'FAIL',
+        durationMs: Date.now() - this.startTime,
+        ledgerPath: '',
+        runInstructions: '',
+        summary: `Research failed: ${msg}`,
+      };
+    }
+  }
+
+  /** Search tools (Exa/Tavily) the researcher needs but has no API key for. */
+  private getMissingSearchTools() {
+    if (!this.toolManager) return [];
+    return this.toolManager
+      .getToolsForAgent('researcher')
+      .filter(
+        (t) =>
+          t.apiKeyEnv &&
+          t.signupUrl &&
+          !(this.apiKeys[t.apiKeyEnv] || process.env[t.apiKeyEnv])
+      );
   }
 
   private parseJsonSafe(text: string): any {
@@ -975,47 +1097,12 @@ ${decisionsText}`.trim();
   private initAgentStatuses(): void {
     const roles: AgentRole[] = ['orchestrator', 'clarifier', 'researcher', 'planner', 'coder', 'auditor', 'security', 'verifier'];
     roles.forEach((r) => this.agentStatuses.set(r, 'idle'));
-    this.pushGraph();
   }
 
   private setAgent(id: AgentRole, status: AgentStatus, message?: string): void {
     this.spawnedAgents.add(id);
     this.agentStatuses.set(id, status);
     this.eventBus.emit({ type: 'AGENT_STATUS_UPDATE', payload: { agentId: id, status, message } });
-    this.pushGraph();
-  }
-
-  private pushGraph(): void {
-    const workingAgentIds = new Set<string>();
-    this.agentStatuses.forEach((status, id) => {
-      if (status === 'working') workingAgentIds.add(id);
-    });
-
-    const agents = Array.from(this.spawnedAgents);
-    const nodes: AgentGraphNode[] = agents.map((id, index) => {
-      const layout = AGENT_LAYOUT[id] ?? {
-        x: 80 + (index % 4) * 160,
-        y: 60 + Math.floor(index / 4) * 130,
-      };
-      return {
-        id,
-        label: id.charAt(0).toUpperCase() + id.slice(1),
-        role: id,
-        status: this.agentStatuses.get(id) ?? 'idle',
-        x: layout.x,
-        y: layout.y,
-      };
-    });
-
-    const pipelineEdges = PIPELINE_EDGES.filter(
-      (e) => this.spawnedAgents.has(e.source as AgentRole) && this.spawnedAgents.has(e.target as AgentRole)
-    );
-    const edges: AgentGraphEdge[] = [...pipelineEdges, ...this.runtimeEdges].map((e) => ({
-      ...e,
-      animated: workingAgentIds.has(e.source) || workingAgentIds.has(e.target),
-    }));
-
-    this.eventBus.emit({ type: 'AGENT_GRAPH_UPDATE', payload: { nodes, edges } });
   }
 
   requestStop(): void {
@@ -1024,7 +1111,6 @@ ${decisionsText}`.trim();
     this.isPaused = false;
     const roles: AgentRole[] = ['orchestrator', 'clarifier', 'researcher', 'planner', 'coder', 'auditor', 'security', 'verifier'];
     roles.forEach((r) => this.agentStatuses.set(r, 'idle'));
-    this.pushGraph();
     this.chat('system', '⏹ Orchestration stopped by user.');
     this.eventBus.emit({
       type: 'ERROR_OCCURRED',
@@ -1090,6 +1176,7 @@ ${decisionsText}`.trim();
         agents: Object.fromEntries(this.agentStatuses) as Record<string, AgentStatus>,
         artifacts: [],
         isRunning: this.isRunning,
+        isStreaming: this.isRunning,
       },
     });
   }
@@ -1120,6 +1207,11 @@ ${decisionsText}`.trim();
 
   private chat(role: 'user' | 'assistant' | 'system', content: string): void {
     this.eventBus.emit({ type: 'CHAT_MESSAGE', payload: { role, content, timestamp: Date.now() } });
+  }
+
+  /** Follow-up turn: route through the SAME unified path (no forced chat mode). */
+  async continueChat(goal: string): Promise<DeliveryReport> {
+    return this.runUnified(goal, { first: false });
   }
 
   private emitArtifact(taskId: string, filePath: string, agentId: string): void {

@@ -174,6 +174,7 @@ export class AgentRuntime {
     let toolCallCount = 0;
     let lastAssistantContent = '';
     let lastToolName: string | null = null;
+    let lastArgsStr: string | null = null;
     let consecutiveSameTool = 0;
 
     while (iteration < this.options.maxIterations) {
@@ -362,18 +363,28 @@ export class AgentRuntime {
                break;
              }
 
-             if (lastToolName === toolName) {
-               consecutiveSameTool++;
-             } else {
-               consecutiveSameTool = 0;
-             }
-             lastToolName = toolName;
-             if (consecutiveSameTool >= 3) {
-               finalResponse = lastAssistantContent || `Stopped: repeated ${toolName} calls detected — stopping to avoid a loop.`;
-               steps.push({ type: 'final', content: finalResponse, timestamp: Date.now() });
-               messages.push(`Tool (${toolName}): ⚠ Repeated ${toolName} calls detected — stopping to avoid a loop.\n`);
-               break;
-             }
+             // Check for repeated tool calls (same tool name with similar arguments)
+            // This catches models that slightly vary arguments to bypass simple tool-name checks
+            const argsStr = JSON.stringify(toolArgs || {});
+            const argsSimilarity = lastToolName === toolName && 
+              lastArgsStr && 
+              argsStr.length > 10 && 
+              (argsStr.length - lastArgsStr.length) / Math.max(argsStr.length, lastArgsStr.length) < 0.3; // <30% length difference
+            
+            if (argsSimilarity) {
+              consecutiveSameTool++;
+            } else {
+              consecutiveSameTool = 0;
+            }
+            lastToolName = toolName;
+            lastArgsStr = argsStr;
+            
+            if (consecutiveSameTool >= 3) {
+              finalResponse = lastAssistantContent || `Stopped: repeated ${toolName} calls with similar arguments detected — stopping to avoid a loop.`;
+              steps.push({ type: 'final', content: finalResponse, timestamp: Date.now() });
+              messages.push(`Tool (${toolName}): ⚠ Repeated ${toolName} calls with similar arguments detected — stopping to avoid a loop.\n`);
+              break;
+            }
 
             let result: ToolResult;
             if (toolName === 'write_file' && (!toolArgs || typeof toolArgs.path !== 'string' || toolArgs.path.trim() === '')) {

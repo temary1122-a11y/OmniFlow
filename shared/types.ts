@@ -208,15 +208,6 @@ export interface AgentStatusUpdate {
   progress?: number;
 }
 
-export interface AgentGraphNode {
-  id: string;
-  label: string;
-  role: AgentRole;
-  status: AgentStatus;
-  x: number;
-  y: number;
-}
-
 export interface AgentGraphEdge {
   id: string;
   source: string;
@@ -281,7 +272,6 @@ export type IpcMessage =
   | { type: 'OMNIFLOW_STATE_UPDATE'; payload: OmniState }
   | { type: 'PHASE_TRANSITION'; payload: { from: Phase; to: Phase; timestamp: number } }
   | { type: 'AGENT_STATUS_UPDATE'; payload: AgentStatusUpdate }
-  | { type: 'AGENT_GRAPH_UPDATE'; payload: { nodes: AgentGraphNode[]; edges: AgentGraphEdge[] } }
   | { type: 'ARTIFACT_CREATED'; payload: { filePath: string; agentId: string; taskId: string } }
   | { type: 'VERIFICATION_RESULT'; payload: { subtaskId: string; verdict: VerificationVerdict; risks: unknown[] } }
   | { type: 'DELIVERY_COMPLETE'; payload: { taskId: string; report: DeliveryReport } }
@@ -321,4 +311,5 @@ export interface OmniState {
   agents: Record<string, AgentStatus>;
   artifacts: string[];
   isRunning: boolean;
+  isStreaming: boolean;
 }

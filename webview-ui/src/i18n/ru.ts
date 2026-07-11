@@ -14,10 +14,6 @@ export type TranslationKey =
   | 'sidebar.configureApi'
   | 'sidebar.expand'
   | 'sidebar.collapse'
-  | 'panel.agents'
-  | 'panel.agentGraph'
-  | 'panel.agentMeshIdle'
-  | 'panel.agentMeshStart'
   | 'panel.files'
   | 'panel.refresh'
   | 'panel.refreshWorkspace'
@@ -121,10 +117,6 @@ export const ru: Record<TranslationKey, string> = {
   'sidebar.expand': 'Развернуть панель',
   'sidebar.collapse': 'Свернуть панель',
   'panel.selectModel': 'Выбрать модель…',
-  'panel.agents': 'Агенты',
-  'panel.agentGraph': 'Граф агентов',
-  'panel.agentMeshIdle': 'Сеть агентов простаивает',
-  'panel.agentMeshStart': 'Начните задачу — узлы появляются по мере активации агентов.',
   'panel.files': 'Файлы',
   'panel.refresh': 'Обновить',
   'panel.refreshWorkspace': 'Обновить рабочую область',

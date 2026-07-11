@@ -21,12 +21,14 @@ import * as crypto from 'crypto';
 /**
  * Chat agent — the "answer directly" path.
  *
- * It reuses the SAME model-driven ReAct loop as the coder (AgentRuntime), but
- * with a READ-ONLY tool set. The model receives the question and decides for
- * itself whether to call a read tool (e.g. to inspect a file) or answer
- * directly — exactly like Claude Code / Codex, where a quick question may take
- * one tool call and end, while a deeper one chains several. No hardcoded
- * sequence, no coder, no build/verify loop.
+ * It reuses the SAME model-driven ReAct loop as the coder (AgentRuntime), with
+ * the FULL tool set (read + write + bash + semantic code search + memory), so a
+ * simple question can be answered directly while still letting the model inspect
+ * or even create files when the user explicitly asks. There is no separate
+ * read-only "basic mode": a casual question just answers, but the model may call
+ * any tool. This mirrors Claude Code / Codex, where the harness lets the model
+ * decide per turn which tools (if any) to use. No hardcoded sequence, no coder,
+ * no build/verify loop.
  */
 export class ChatAgent {
   agentId = 'chat';
@@ -46,6 +48,14 @@ export class ChatAgent {
     this.consultFn = fn;
   }
 
+  /** Detect the language of a user message so we can reply in the same language. */
+  private detectLanguage(text: string): string {
+    if (/[а-яА-ЯёЁ]/.test(text)) return 'Russian';
+    if (/[\u4e00-\u9fff]/.test(text)) return 'Chinese';
+    if (/[\u0600-\u06FF]/.test(text)) return 'Arabic';
+    return 'English';
+  }
+
   async answer(goal: string, workspaceRoot: string): Promise<string> {
     const toolRegistry = new ToolRegistry(this.eventBus);
     const defs: ToolDefinition[] = [];
@@ -54,13 +64,14 @@ export class ChatAgent {
       defs.push(def);
     };
 
-    // Read-only tools only. We deliberately exclude write_file / bash / replace_symbol.
+    // Full tool set (NOT read-only): the model decides per turn whether to read,
+    // search, run a command, or write. For a casual question it will usually
+    // just answer; for "write me a quick script" it can use the write tools.
     if (workspaceRoot) {
       const sandbox = new SandboxTool({ workspaceRoot, eventBus: this.eventBus });
       const semantic = new SemanticEditor(workspaceRoot);
       const { tools, executors } = createDefaultTools(sandbox, semantic, workspaceRoot);
-      const readFile = tools.find((t) => t.name === 'read_file');
-      if (readFile) register('read_file', readFile, executors['read_file']);
+      for (const t of tools) register(t.name, t, executors[t.name]);
 
       try {
         const codeIndex = new BuiltInCodeIndex({ workspaceRoot, maxTokens: 12000 });
@@ -84,12 +95,18 @@ export class ChatAgent {
       for (const t of ct.tools) register(t.name, t, ct.executors[t.name]);
     }
 
+    // Reply in the user's own language (mirrors ClarifierAgent.detectLanguage).
+    // Without this the model defaults to English regardless of the user's language.
+    const language = this.detectLanguage(goal);
     const systemPrompt = `You are Omni, a helpful AI assistant integrated into the user's editor.
 You answer questions, explain concepts, reason about code, and hold a conversation.
-You are in CHAT mode: do NOT create or write project files unless the user explicitly asks you to produce a file.
-You have read-only tools (read_file, semantic code search, memory) you MAY use to inspect the
-workspace when it genuinely helps your answer — but for a general question, just answer.
-Be concise, accurate, and friendly. If you used a tool, briefly say what you found.`;
+CRITICAL: Always respond in the SAME language the user wrote in (detected: ${language}).
+If the user's message is in Russian, answer in Russian. If in English, answer in English.
+You have the FULL tool set available (read_file, bash, write_file, replace_symbol,
+semantic code search, memory). For a general/simple question, just answer directly —
+call a tool only when it genuinely helps. If the user explicitly asks you to create or
+change a file, you MAY use the write tools to do so. Be concise, accurate, and friendly.
+If you used a tool, briefly say what you found or changed.`;
 
     const runtime = new AgentRuntime(this.eventBus!, this.router, toolRegistry, {
       agentId: 'chat',
