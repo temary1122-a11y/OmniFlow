@@ -2,6 +2,7 @@ import { RefreshCw, Folder, File as FileIcon } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useOmniStore } from '@/store/omniStore';
 import type { WorkspaceFile } from '@/types';
+import { useTranslation } from '@/i18n';
 
 /**
  * FilesPanel
@@ -87,6 +88,7 @@ function WorkspaceRow({ node, depth }: { node: WorkspaceFile; depth: number }) {
 }
 
 export function FilesPanel() {
+  const { t } = useTranslation();
   const artifacts = useOmniStore((s) => s.artifacts);
   const workspaceRoot = useOmniStore((s) => s.workspaceRoot);
   const workspaceTree = useOmniStore((s) => s.workspaceTree);
@@ -107,13 +109,13 @@ export function FilesPanel() {
       <div style={headerStyle}>
         <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3, display: 'flex', alignItems: 'center', gap: 8 }}>
           <Folder size={16} style={{ color: ACCENT }} />
-          Files
+          {t('panel.files')}
         </span>
         <button
           type="button"
           onClick={() => requestWorkspace()}
-          title={sessionId ? 'Refresh workspace' : 'Start a session to load the workspace'}
-          aria-label="Refresh workspace"
+          title={sessionId ? t('panel.refreshWorkspace') : t('panel.refreshDisabled')}
+          aria-label={t('panel.refresh')}
           disabled={!sessionId}
           style={{
             display: 'flex',
@@ -130,21 +132,21 @@ export function FilesPanel() {
           }}
         >
           <RefreshCw size={13} />
-          Refresh
+          {t('panel.refresh')}
         </button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
         {workspaceRoot && (
           <div style={{ padding: '6px 14px', fontSize: 11, color: DESC }}>
-            Root: <span style={{ color: FG }}>{workspaceRoot}</span>
+            {t('panel.root')} <span style={{ color: FG }}>{workspaceRoot}</span>
           </div>
         )}
 
-        <div style={sectionLabelStyle}>Generated artifacts</div>
+        <div style={sectionLabelStyle}>{t('panel.generatedArtifacts')}</div>
         {artifacts.length === 0 ? (
           <p style={{ margin: 0, padding: '0 14px', fontSize: 11, color: DESC }}>
-            No artifacts generated yet.
+            {t('panel.noArtifacts')}
           </p>
         ) : (
           artifacts.map((filePath) => (
@@ -176,12 +178,12 @@ export function FilesPanel() {
           ))
         )}
 
-        <div style={sectionLabelStyle}>Workspace</div>
+        <div style={sectionLabelStyle}>{t('panel.workspace')}</div>
         {workspaceTree.length === 0 ? (
           <p style={{ margin: 0, padding: '0 14px', fontSize: 11, color: DESC }}>
             {sessionId
-              ? 'Workspace tree not loaded. Press Refresh.'
-              : 'Start a session, then press Refresh to load the workspace tree.'}
+              ? t('panel.workspaceNotLoaded')
+              : t('panel.workspaceStartSession')}
           </p>
         ) : (
           workspaceTree.map((node) => <WorkspaceRow key={node.path} node={node} depth={0} />)

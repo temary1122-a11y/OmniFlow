@@ -3,6 +3,7 @@ import { Brain, ChevronRight } from 'lucide-react';
 import type { AgentRole, Phase } from '@/types';
 import { AGENT_META, PHASE_LABELS } from '@/utils/agentConfig';
 import { useTypewriter } from '@/hooks/useTypewriter';
+import { useTranslation } from '@/i18n';
 
 interface ReasoningBlockProps {
   content: string;
@@ -13,6 +14,7 @@ interface ReasoningBlockProps {
 }
 
 export function ReasoningBlock({ content, agentId, phase, stream = true }: ReasoningBlockProps) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(stream);
   const meta = agentId ? AGENT_META[agentId] : null;
   const color = meta?.color ?? 'var(--color-text-secondary, #8b949e)';
@@ -58,7 +60,7 @@ export function ReasoningBlock({ content, agentId, phase, stream = true }: Reaso
         />
         <Brain size={12} style={{ color }} />
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--color-text-secondary, #8b949e)' }}>
-          Reasoning
+          {t('reasoning.title')}
         </span>
         <span style={{ fontSize: 11, fontWeight: 600, color }}>{label}</span>
         {phaseLabel && (

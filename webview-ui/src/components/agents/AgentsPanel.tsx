@@ -1,11 +1,11 @@
 import { Users } from 'lucide-react';
-import { AgentCard } from './AgentCard';
 import { TimelineView } from './TimelineView';
 import { AgentGraph } from './AgentGraph';
 import { AgentDetail } from './AgentDetail';
-import { CANONICAL_AGENT_ROLES } from '@/utils/agentConfig';
+import { useTranslation } from '@/i18n';
 
 export function AgentsPanel() {
+  const { t } = useTranslation();
   return (
     <div
       style={{
@@ -27,7 +27,7 @@ export function AgentsPanel() {
         }}
       >
         <Users size={16} style={{ color: 'var(--vscode-textLink-foreground, #7c6af7)' }} />
-        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>Agents</span>
+        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>{t('panel.agents')}</span>
       </div>
 
       <div
@@ -41,22 +41,15 @@ export function AgentsPanel() {
           padding: 14,
         }}
       >
-        <section>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-              gap: 10,
-            }}
-          >
-            {CANONICAL_AGENT_ROLES.map((role) => (
-              <AgentCard key={role} role={role} />
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <TimelineView />
+        <section
+          style={{
+            border: '1px solid var(--vscode-panel-border, #30363d)',
+            borderRadius: 12,
+            overflow: 'hidden',
+            minHeight: 240,
+          }}
+        >
+          <AgentDetail />
         </section>
 
         <section
@@ -77,22 +70,15 @@ export function AgentsPanel() {
               borderBottom: '1px solid var(--vscode-panel-border, #30363d)',
             }}
           >
-            Agent Graph
+            {t('panel.agentGraph')}
           </div>
           <div style={{ height: 260 }}>
             <AgentGraph />
           </div>
         </section>
 
-        <section
-          style={{
-            border: '1px solid var(--vscode-panel-border, #30363d)',
-            borderRadius: 12,
-            overflow: 'hidden',
-            minHeight: 240,
-          }}
-        >
-          <AgentDetail />
+        <section>
+          <TimelineView />
         </section>
       </div>
     </div>

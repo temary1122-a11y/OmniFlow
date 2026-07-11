@@ -2,8 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import type { CSSProperties, KeyboardEvent } from 'react';
 import { Play, Pause, Square, X } from 'lucide-react';
 import { useOmniStore } from '@/store/omniStore';
+import { useTranslation } from '@/i18n';
 
 export function PromptInput() {
+  const { t } = useTranslation();
   const sessionId = useOmniStore((s) => s.sessionId);
   const goal = useOmniStore((s) => s.goal);
   const isRunning = useOmniStore((s) => s.isRunning);
@@ -51,7 +53,7 @@ export function PromptInput() {
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             rows={2}
-            placeholder={goal ? 'Refine the task…' : 'Describe what you want to build…'}
+            placeholder={goal ? t('chat.refineTask') : t('chat.describeBuild')}
             style={{
               flex: 1,
               resize: 'none',
@@ -90,7 +92,7 @@ export function PromptInput() {
               zIndex: 10,
             }}
           >
-            <Play size={14} /> Run
+            <Play size={14} /> {t('welcome.run')}
           </button>
         </div>
       </div>
@@ -131,7 +133,7 @@ export function PromptInput() {
               animation: busy ? 'omni-blink 1s steps(1) infinite' : 'none',
             }}
           />
-          {busy ? 'Running…' : 'Idle'}
+          {busy ? t('chat.running') : t('chat.idle')}
         </span>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
@@ -139,8 +141,8 @@ export function PromptInput() {
             type="button"
             onClick={togglePause}
             disabled={!busy}
-            title="Pause"
-            aria-label="Pause"
+            title={t('toolbar.pause')}
+            aria-label={t('toolbar.pause')}
             style={controlBtn(busy, 'var(--color-warning, #d29922)')}
           >
             <Pause size={14} />
@@ -149,8 +151,8 @@ export function PromptInput() {
             type="button"
             onClick={stopGeneration}
             disabled={!busy}
-            title="Stop"
-            aria-label="Stop"
+            title={t('toolbar.stop')}
+            aria-label={t('toolbar.stop')}
             style={controlBtn(busy, 'var(--color-error, #f85149)')}
           >
             <Square size={13} style={{ fill: 'currentColor' }} />
@@ -158,8 +160,8 @@ export function PromptInput() {
           <button
             type="button"
             onClick={clearMessages}
-            title="Clear"
-            aria-label="Clear"
+            title={t('chat.clear')}
+            aria-label={t('chat.clear')}
             style={controlBtn(true, 'var(--color-text-secondary, #8b949e)')}
           >
             <X size={14} />
@@ -170,7 +172,7 @@ export function PromptInput() {
       <input
         type="text"
         disabled
-        placeholder="Generation in progress…"
+        placeholder={t('chat.generationInProgress')}
         style={{
           width: '100%',
           marginTop: 'var(--space-2, 8px)',

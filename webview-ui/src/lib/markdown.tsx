@@ -10,6 +10,7 @@
 import { Fragment, useState, type ReactNode } from 'react';
 import type { CSSProperties } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { useTranslation } from '@/i18n';
 
 const CODE_BG = 'var(--vscode-editor-background, #010409)';
 const FG = 'var(--vscode-foreground, #e6e6e6)';
@@ -66,6 +67,7 @@ export function CodeBlock({
   language: string;
   showCopy?: boolean;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const handleCopy = () => {
     navigator.clipboard?.writeText(code).then(() => {
@@ -103,8 +105,8 @@ export function CodeBlock({
           <button
             type="button"
             onClick={handleCopy}
-            aria-label="Copy code"
-            title="Copy code"
+            aria-label={t('markdown.copyCode')}
+            title={t('markdown.copyCode')}
             style={{
               background: 'transparent',
               border: 'none',

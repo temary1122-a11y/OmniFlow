@@ -2,6 +2,7 @@ import { Settings, KeyRound, Trash2, Download, Sparkles, Shield } from 'lucide-r
 import type { CSSProperties } from 'react';
 import { useOmniStore } from '@/store/omniStore';
 import type { ChatVerbosity } from '@/lib/chatFilters';
+import { useTranslation } from '@/i18n';
 
 const ACCENT = 'var(--vscode-textLink-foreground, #7c6af7)';
 const BORDER = 'var(--vscode-panel-border, #30363d)';
@@ -44,6 +45,7 @@ function fieldLabel(text: string) {
 }
 
 export function SettingsPanel() {
+  const { t } = useTranslation();
   const modelCatalog = useOmniStore((s) => s.modelCatalog);
   const selectModel = useOmniStore((s) => s.selectModel);
   const configureApi = useOmniStore((s) => s.configureApi);
@@ -72,31 +74,31 @@ export function SettingsPanel() {
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', color: FG }}>
       <div style={headerStyle}>
         <Settings size={16} style={{ color: ACCENT }} />
-        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>Settings</span>
+        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>{t('panel.settings')}</span>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14, display: 'flex', flexDirection: 'column', gap: 18 }}>
         <section>
-          {fieldLabel('Chat density')}
+          {fieldLabel(t('panel.chatDensity'))}
           <select
             value={chatVerbosity}
             onChange={(e) => setChatVerbosity(e.target.value as ChatVerbosity)}
-            aria-label="Chat verbosity"
+            aria-label={t('panel.chatDensity')}
             style={selectStyle}
           >
-            <option value="minimal">Minimal — focus on results & agent commentary</option>
-            <option value="normal">Normal — show tools & reasoning</option>
-            <option value="debug">Debug — everything including LLM calls</option>
+            <option value="minimal">{t('panel.densityMinimal')}</option>
+            <option value="normal">{t('panel.densityNormal')}</option>
+            <option value="debug">{t('panel.densityDebug')}</option>
           </select>
         </section>
 
         <section>
-          {fieldLabel('Budget (free models first)')}
-          <select value={budget} onChange={(e) => setBudget(e.target.value as typeof budget)} aria-label="Budget" style={selectStyle}>
-            <option value="free">Free — maximize :free models</option>
-            <option value="low">Low</option>
-            <option value="normal">Normal</option>
-            <option value="high">High</option>
+          {fieldLabel(t('panel.budget'))}
+          <select value={budget} onChange={(e) => setBudget(e.target.value as typeof budget)} aria-label={t('panel.budget')} style={selectStyle}>
+            <option value="free">{t('panel.budgetFree')}</option>
+            <option value="low">{t('panel.budgetLow')}</option>
+            <option value="normal">{t('panel.budgetNormal')}</option>
+            <option value="high">{t('panel.budgetHigh')}</option>
           </select>
         </section>
 
@@ -104,23 +106,23 @@ export function SettingsPanel() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <Shield size={14} style={{ color: ACCENT }} />
             <div>
-              <div style={{ fontSize: 12.5, fontWeight: 600 }}>Agent Supervisor</div>
-              <div style={{ fontSize: 11, color: DESC }}>Smart parallel coder orchestration with retry</div>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{t('panel.agentSupervisor')}</div>
+              <div style={{ fontSize: 11, color: DESC }}>{t('panel.supervisorDesc')}</div>
             </div>
           </div>
           <input
             type="checkbox"
             checked={useSupervisor}
             onChange={(e) => setUseSupervisor(e.target.checked)}
-            aria-label="Enable agent supervisor"
+            aria-label={t('panel.enableSupervisor')}
           />
         </section>
 
         <section>
-          {fieldLabel('Model')}
+          {fieldLabel(t('panel.model'))}
           {Object.keys(modelCatalog).length > 0 ? (
-            <select defaultValue="" onChange={(e) => selectModel(e.target.value || undefined)} aria-label="Select model" style={selectStyle}>
-              <option value="">Select model…</option>
+            <select defaultValue="" onChange={(e) => selectModel(e.target.value || undefined)} aria-label={t('panel.model')} style={selectStyle}>
+              <option value="">{t('panel.selectModel')}</option>
               {Object.entries(modelCatalog).map(([provider, models]) => (
                 <optgroup key={provider} label={provider}>
                   {models.map((model) => (
@@ -132,28 +134,28 @@ export function SettingsPanel() {
               ))}
             </select>
           ) : (
-            <p style={{ margin: 0, fontSize: 11, color: DESC }}>Model catalog loads when the extension connects.</p>
+            <p style={{ margin: 0, fontSize: 11, color: DESC }}>{t('panel.modelCatalogLoading')}</p>
           )}
         </section>
 
         <section style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button type="button" onClick={() => configureApi()} style={btnStyle(true)} aria-label="Configure API">
+          <button type="button" onClick={() => configureApi()} style={btnStyle(true)} aria-label={t('panel.configureApiKeys')}>
             <KeyRound size={14} />
-            Configure API Keys
+            {t('panel.configureApiKeys')}
           </button>
-          <button type="button" onClick={() => exportSession()} style={btnStyle(false)} aria-label="Export session">
+          <button type="button" onClick={() => exportSession()} style={btnStyle(false)} aria-label={t('panel.exportSession')}>
             <Download size={14} />
-            Export session JSON
+            {t('panel.exportSessionJson')}
           </button>
-          <button type="button" onClick={() => clearMessages()} style={btnStyle(false)} aria-label="Clear chat">
+          <button type="button" onClick={() => clearMessages()} style={btnStyle(false)} aria-label={t('panel.clearChat')}>
             <Trash2 size={14} />
-            Clear chat
+            {t('panel.clearChat')}
           </button>
         </section>
 
         {chatVerbosity === 'debug' && activityLog.length > 0 && (
           <section>
-            {fieldLabel('Activity log')}
+            {fieldLabel(t('panel.activityLog'))}
             <pre
               style={{
                 margin: 0,
@@ -175,10 +177,10 @@ export function SettingsPanel() {
         <section style={{ padding: 12, borderRadius: 10, border: `1px solid ${ACCENT}33`, background: `${ACCENT}0a` }}>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 6 }}>
             <Sparkles size={14} style={{ color: ACCENT }} />
-            <span style={{ fontSize: 12, fontWeight: 600 }}>Vibe-coder mode</span>
+            <span style={{ fontSize: 12, fontWeight: 600 }}>{t('panel.vibeMode')}</span>
           </div>
           <p style={{ margin: 0, fontSize: 11, lineHeight: 1.5, color: DESC }}>
-            Use <strong>Minimal</strong> chat density + <strong>Free</strong> budget. Agents delegate live — watch the graph spawn nodes as they activate.
+            {t('panel.vibeModeDesc')}
           </p>
         </section>
       </div>

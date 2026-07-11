@@ -1,7 +1,8 @@
 import { X, Brain } from 'lucide-react';
 import { useOmniStore } from '@/store/omniStore';
-import { AGENT_META, STATUS_LABELS, getAgentMeta, getStatusColor } from '@/utils/agentConfig';
-import type { AgentRole } from '@/types';
+import { STATUS_LABELS, getAgentMeta, getStatusColor } from '@/utils/agentConfig';
+import type { AgentRole, AgentStatus } from '@/types';
+import { useTranslation } from '@/i18n';
 
 /**
  * AgentDetail
@@ -11,6 +12,7 @@ import type { AgentRole } from '@/types';
  */
 
 export function AgentDetail() {
+  const { t } = useTranslation();
   const selectedAgentId = useOmniStore((s) => s.selectedAgentId);
   const showAgentDetail = useOmniStore((s) => s.showAgentDetail);
   const reasoningTraces = useOmniStore((s) => s.reasoningTraces);
@@ -21,7 +23,7 @@ export function AgentDetail() {
 
   const role = selectedAgentId as AgentRole;
   const meta = getAgentMeta(role);
-  const status = agentStatuses[role];
+  const status = agentStatuses[role] as AgentStatus;
   const statusColor = getStatusColor(status);
   const traces = reasoningTraces[role] ?? [];
 
@@ -62,7 +64,7 @@ export function AgentDetail() {
         </div>
         <button
           type="button"
-          aria-label="Close agent detail"
+          aria-label={t('reasoning.closeDetail')}
           onClick={() => setShowAgentDetail(false)}
           style={{
             display: 'flex',
@@ -118,15 +120,15 @@ export function AgentDetail() {
               color: 'var(--vscode-descriptionForeground, #8b949e)',
             }}
           >
-            <Brain size={12} style={{ color: meta.color }} /> Reasoning
+            <Brain size={12} style={{ color: meta.color }} /> {t('reasoning.title')}
           </div>
           {traces.length === 0 ? (
             <p style={{ margin: 0, paddingLeft: 4, fontSize: 12, color: 'var(--vscode-descriptionForeground, #8b949e)' }}>
-              No thoughts yet.
+              {t('reasoning.noThoughts')}
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {traces.map((trace, i) => (
+              {traces.map((trace: string, i: number) => (
                 <div
                   key={i}
                   style={{

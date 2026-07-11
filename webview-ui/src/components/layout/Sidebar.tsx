@@ -10,9 +10,10 @@ import {
 } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useOmniStore } from '@/store/omniStore';
-import { AGENT_META, STATUS_LABELS, getAgentMeta, getStatusColor, CANONICAL_AGENT_ROLES } from '@/utils/agentConfig';
+import { STATUS_LABELS, getAgentMeta, getStatusColor, CANONICAL_AGENT_ROLES } from '@/utils/agentConfig';
 import { cn } from '@/utils/cn';
-import type { AgentRole } from '@/types';
+import { useTranslation } from '@/i18n';
+import type { AgentRole, AgentStatus } from '@/types';
 
 /**
  * Sidebar
@@ -26,11 +27,11 @@ import type { AgentRole } from '@/types';
 type Tab = 'chat' | 'agents' | 'files' | 'sessions' | 'settings';
 
 const NAV_ITEMS: { id: Tab; icon: typeof MessageSquare; label: string }[] = [
-  { id: 'chat', icon: MessageSquare, label: 'Chat' },
-  { id: 'agents', icon: Boxes, label: 'Agents' },
-  { id: 'files', icon: Folder, label: 'Files' },
-  { id: 'sessions', icon: History, label: 'Sessions' },
-  { id: 'settings', icon: Settings, label: 'Settings' },
+  { id: 'chat', icon: MessageSquare, label: 'Чат' },
+  { id: 'agents', icon: Boxes, label: 'Агенты' },
+  { id: 'files', icon: Folder, label: 'Файлы' },
+  { id: 'sessions', icon: History, label: 'Сессии' },
+  { id: 'settings', icon: Settings, label: 'Настройки' },
 ];
 
 const ACCENT = 'var(--color-primary, #7c6af7)';
@@ -50,6 +51,7 @@ const sectionLabelStyle: CSSProperties = {
 };
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const activeTab = useOmniStore((s) => s.activeTab);
   const setActiveTab = useOmniStore((s) => s.setActiveTab);
   const agentStatuses = useOmniStore((s) => s.agentStatuses);
@@ -89,8 +91,8 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          title="Expand sidebar"
-          aria-label="Expand sidebar"
+          title={t('sidebar.expand')}
+          aria-label={t('sidebar.expand')}
           style={railBtnStyle(false)}
         >
           <PanelLeftOpen size={17} />
@@ -120,7 +122,7 @@ export function Sidebar() {
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, paddingTop: 2 }}>
           {CANONICAL_AGENT_ROLES.map((role) => {
             const meta = getAgentMeta(role);
-            const status = agentStatuses[role];
+            const status = agentStatuses[role] as AgentStatus;
             const selected = selectedAgentId === role;
             return (
               <button
@@ -192,13 +194,13 @@ export function Sidebar() {
         }}
       >
         <span style={{ fontSize: 'var(--font-size-sm, 12px)', fontWeight: 'var(--font-weight-semibold, 600)', letterSpacing: 0.3, color: DESC }}>
-          Navigator
+          {t('sidebar.navigator')}
         </span>
         <button
           type="button"
           onClick={() => setSidebarOpen(false)}
-          title="Collapse sidebar"
-          aria-label="Collapse sidebar"
+          title={t('sidebar.collapse')}
+          aria-label={t('sidebar.collapse')}
           style={railBtnStyle(false)}
         >
           <PanelLeftClose size={16} />
@@ -272,10 +274,10 @@ export function Sidebar() {
 
         {/* Agents subsection */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-          <div style={sectionLabelStyle}>Agents</div>
+          <div style={sectionLabelStyle}>{t('sidebar.agents')}</div>
           {CANONICAL_AGENT_ROLES.map((role) => {
             const meta = getAgentMeta(role);
-            const status = agentStatuses[role];
+            const status = agentStatuses[role] as AgentStatus;
             const selected = selectedAgentId === role;
             return (
               <button
@@ -331,11 +333,11 @@ export function Sidebar() {
 
         {/* Providers subsection */}
         <section style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <div style={sectionLabelStyle}>Providers</div>
+          <div style={sectionLabelStyle}>{t('sidebar.providers')}</div>
 
           {Object.keys(providerInfo).length === 0 ? (
             <p style={{ margin: 0, padding: '0 8px', fontSize: 11, color: DESC }}>
-              No providers detected yet.
+              {t('sidebar.noProviders')}
             </p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -374,7 +376,7 @@ export function Sidebar() {
                     {name}
                   </span>
                   <span style={{ fontSize: 10, color: info.hasKey ? GREEN : DESC }}>
-                    {info.hasKey ? 'connected' : 'no key'}
+                    {info.hasKey ? t('sidebar.connected') : t('sidebar.noKey')}
                   </span>
                 </div>
               ))}
@@ -385,7 +387,7 @@ export function Sidebar() {
             <select
               defaultValue=""
               onChange={(e) => selectModel(e.target.value || undefined)}
-              aria-label="Select model"
+               aria-label={t('sidebar.selectModel')}
               style={{
                 width: '100%',
                 padding: '6px 8px',
@@ -397,7 +399,7 @@ export function Sidebar() {
                 outline: 'none',
               }}
             >
-              <option value="">Select model…</option>
+              <option value="">{t('sidebar.selectModel')}</option>
               {Object.entries(modelCatalog).map(([provider, models]) => (
                 <optgroup key={provider} label={provider}>
                   {models.map((model) => (
@@ -413,8 +415,8 @@ export function Sidebar() {
           <button
             type="button"
             onClick={() => configureApi()}
-            title="Configure API keys"
-            aria-label="Configure API keys"
+            title={t('sidebar.configureApi')}
+            aria-label={t('sidebar.configureApi')}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -432,7 +434,7 @@ export function Sidebar() {
             }}
           >
             <KeyRound size={14} />
-            Configure API
+          {t('sidebar.configureApi')}
           </button>
         </section>
       </div>

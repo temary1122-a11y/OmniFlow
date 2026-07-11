@@ -1,4 +1,5 @@
-import type { CSSProperties, DeliveryReport, VerificationVerdict } from '@/types';
+import type { CSSProperties } from 'react';
+import type { DeliveryReport, VerificationVerdict } from '@/types';
 import { useOmniStore } from '@/store/omniStore';
 
 const VERIDCT_COLOR: Record<VerificationVerdict, string> = {

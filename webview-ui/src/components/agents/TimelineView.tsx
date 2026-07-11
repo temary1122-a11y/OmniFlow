@@ -2,6 +2,7 @@ import { Check } from 'lucide-react';
 import { useOmniStore } from '@/store/omniStore';
 import { PHASE_COLORS, PHASE_LABELS } from '@/utils/agentConfig';
 import type { Phase } from '@/types';
+import { useTranslation } from '@/i18n';
 
 /**
  * TimelineView
@@ -23,6 +24,7 @@ const ORDER: Phase[] = [
 ];
 
 export function TimelineView() {
+  const { t } = useTranslation();
   const currentPhase = useOmniStore((s) => s.currentPhase);
   const completedPhases = useOmniStore((s) => s.completedPhases);
   const sessionId = useOmniStore((s) => s.sessionId);
@@ -74,7 +76,7 @@ export function TimelineView() {
                   }}
                   onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
                   onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-                  aria-label={`Jump to ${meta} phase`}
+                  aria-label={t('timeline.jumpToPhase', { meta })}
                 >
                   <span
                     style={{
@@ -107,7 +109,7 @@ export function TimelineView() {
                       {meta}
                     </div>
                     {isActive && (
-                      <div style={{ fontSize: 10.5, color }}>In progress…</div>
+                      <div style={{ fontSize: 10.5, color }}>{t('timeline.inProgress')}</div>
                     )}
                   </div>
                 </button>

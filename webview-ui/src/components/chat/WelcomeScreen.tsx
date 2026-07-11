@@ -20,7 +20,7 @@ export function WelcomeScreen({ onStart }: { onStart: (goal: string, mode: 'chat
       }}
     >
       <h1 style={{ fontSize: 'var(--font-size-4xl, 30px)', margin: 0, color: 'var(--color-text-primary, #e6e6e6)', fontWeight: 'var(--font-weight-bold, 700)' }}>
-        Omni — AI Orchestrator
+        Omni — AI Оркестратор
       </h1>
       <p style={{ color: 'var(--color-text-secondary, #8b949e)', marginTop: 8, maxWidth: 460, fontSize: 'var(--font-size-base, 14px)', lineHeight: 'var(--line-height-normal, 1.6)' }}>
         Мульти-агентная система для планирования, сборки и верификации кода. Выберите агента и сформулируйте задачу.

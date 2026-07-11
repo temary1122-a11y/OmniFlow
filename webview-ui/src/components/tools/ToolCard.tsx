@@ -5,6 +5,7 @@ import { cn } from '@/utils/cn';
 import { getToolIcon } from '@/utils/agentConfig';
 import { monoBoxStyle } from '@/styles/mono';
 import { useOmniStore } from '@/store/omniStore';
+import { useTranslation } from '@/i18n';
 
 type ToolPart = Extract<MessagePart, { type: 'tool_call' } | { type: 'tool_result' }>;
 
@@ -132,15 +133,16 @@ function renderBody(part: ToolPart) {
 }
 
 export function ToolCard({ part }: { part: ToolPart }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(true);
   const isCall = part.type === 'tool_call';
   const success = part.type === 'tool_result' ? part.success : undefined;
 
   const badge = isCall
-    ? { label: 'running', color: 'var(--vscode-terminal-ansiYellow, #d29922)' }
+    ? { label: t('tool.running'), color: 'var(--vscode-terminal-ansiYellow, #d29922)' }
     : success
-      ? { label: 'success', color: 'var(--vscode-terminal-ansiGreen, #3fb950)' }
-      : { label: 'error', color: 'var(--vscode-terminal-ansiRed, #f85149)' };
+      ? { label: t('tool.success'), color: 'var(--vscode-terminal-ansiGreen, #3fb950)' }
+      : { label: t('tool.error'), color: 'var(--vscode-terminal-ansiRed, #f85149)' };
 
   return (
     <div

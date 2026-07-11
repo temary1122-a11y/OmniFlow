@@ -7,6 +7,7 @@ import { cn } from '@/utils/cn';
 import { Markdown, CodeBlock } from '@/lib/markdown';
 import { monoBoxStyle } from '@/styles/mono';
 import { useOmniStore } from '@/store/omniStore';
+import { useTranslation } from '@/i18n';
 import { ReasoningBlock } from './ReasoningBlock';
 import { CommentaryBlock } from './CommentaryBlock';
 import { ToolCard } from '@/components/tools/ToolCard';
@@ -203,11 +204,12 @@ function ApprovalInline({ part }: { part: Extract<MessagePart, { type: 'approval
 }
 
 function HeaderMeta({ message }: { message: Message }) {
+  const { t } = useTranslation();
   if (message.role === 'user') {
-    return { icon: '👤', label: 'You', color: 'var(--vscode-textLink-foreground, #7c6af7)' };
+    return { icon: '👤', label: t('chat.you'), color: 'var(--vscode-textLink-foreground, #7c6af7)' };
   }
   if (message.role === 'system') {
-    return { icon: '⚙', label: 'System', color: 'var(--vscode-descriptionForeground, #8b949e)' };
+    return { icon: '⚙', label: t('chat.system'), color: 'var(--vscode-descriptionForeground, #8b949e)' };
   }
   const key: AgentRole = message.agentId ?? 'orchestrator';
   const meta = getAgentMeta(key);
@@ -215,6 +217,7 @@ function HeaderMeta({ message }: { message: Message }) {
 }
 
 function ChatRowBase({ message }: { message: Message }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const meta = HeaderMeta({ message });
   const timeStr = new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -308,7 +311,7 @@ function ChatRowBase({ message }: { message: Message }) {
       <button
         type="button"
         onClick={copy}
-        aria-label="Copy message"
+          aria-label={t('chat.copyMessage')}
         style={{
           position: 'absolute',
           top: 4,

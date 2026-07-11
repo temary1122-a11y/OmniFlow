@@ -17,67 +17,67 @@ export const AGENT_META: Record<AgentRole, { label: string; color: string; icon:
     label: 'Orchestrator',
     color: '#7c6af7',
     icon: '⬡',
-    description: 'Main coordinator managing the full orchestration lifecycle',
+    description: 'Главный координатор, управляющий полным жизненным циклом оркестрации',
   },
   clarifier: {
     label: 'Clarifier',
     color: '#a78bfa',
     icon: '◎',
-    description: 'Goal refinement and clarifying question generation',
+    description: 'Уточнение целей и генерация уточняющих вопросов',
   },
   researcher: {
     label: 'Researcher',
     color: '#3b82f6',
     icon: '◈',
-    description: 'Research and information gathering from external sources',
+    description: 'Исследования и сбор информации из внешних источников',
   },
   planner: {
     label: 'Planner',
     color: '#10b981',
     icon: '◻',
-    description: 'Execution plan creation and task decomposition',
+    description: 'Создание плана выполнения и декомпозиция задач',
   },
   coder: {
     label: 'Coder',
     color: '#f59e0b',
     icon: '◆',
-    description: 'Code implementation and file modifications',
+    description: 'Реализация кода и изменения файлов',
   },
   auditor: {
     label: 'Auditor',
     color: '#ec4899',
     icon: '◉',
-    description: 'Code review and quality assurance',
+    description: 'Ревью кода и контроль качества',
   },
   security: {
     label: 'Security',
     color: '#ef4444',
     icon: '⬟',
-    description: 'Security analysis and vulnerability detection',
+    description: 'Анализ безопасности и обнаружение уязвимостей',
   },
   verifier: {
     label: 'Verifier',
     color: '#06b6d4',
     icon: '◐',
-    description: 'Final verification and acceptance testing',
+    description: 'Финальная верификация и тестирование',
   },
   'pre-installer': {
     label: 'Pre-Installer',
     color: '#f59e0b',
     icon: '⚙',
-    description: 'Pre-installs marketplace dependencies',
+    description: 'Предварительная установка зависимостей маркетплейса',
   },
   'tool-manager': {
     label: 'Tool Manager',
     color: '#ec4899',
     icon: '🛠',
-    description: 'Manages and dispatches tools',
+    description: 'Управляет и распределяет инструменты',
   },
   'context-agent': {
     label: 'Context Agent',
     color: '#8b5cf6',
     icon: '📚',
-    description: 'Retrieves and governs context',
+    description: 'Получение и управление контекстом',
   },
 };
 
@@ -112,24 +112,24 @@ export function getStatusColor(status?: AgentStatus | string): string {
 }
 
 export const STATUS_LABELS: Record<AgentStatus, string> = {
-  idle: 'Idle',
-  working: 'Working',
-  done: 'Done',
-  blocked: 'Blocked',
-  error: 'Error',
+  idle: 'Простой',
+  working: 'Работает',
+  done: 'Готово',
+  blocked: 'Заблокирован',
+  error: 'Ошибка',
 };
 
 export const PHASE_LABELS: Record<Phase, string> = {
-  idle: 'Idle',
-  intake: 'Intake',
-  research: 'Research',
-  planning: 'Planning',
-  build: 'Build',
-  audit: 'Audit',
-  security: 'Security',
-  verify: 'Verify',
-  deliver: 'Deliver',
-  consult: 'Consult',
+  idle: 'Простой',
+  intake: 'Получение',
+  research: 'Исследование',
+  planning: 'Планирование',
+  build: 'Сборка',
+  audit: 'Аудит',
+  security: 'Безопасность',
+  verify: 'Верификация',
+  deliver: 'Доставка',
+  consult: 'Консультация',
 };
 
 export const PHASE_COLORS: Record<Phase, string> = {

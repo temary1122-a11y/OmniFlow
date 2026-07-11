@@ -6,6 +6,7 @@ import { useOmniStore } from '@/store/omniStore';
 import { AGENT_META, getAgentMeta, getStatusColor } from '@/utils/agentConfig';
 import { cn } from '@/utils/cn';
 import type { AgentRole, AgentStatus } from '@/types';
+import { useTranslation } from '@/i18n';
 
 /**
  * AgentGraph
@@ -108,6 +109,7 @@ const AgentNode: React.FC<NodeProps<AgentNodeData>> = ({ data }) => {
 const nodeTypes: NodeTypes = { agentNode: AgentNode };
 
 export function AgentGraph() {
+  const { t } = useTranslation();
   const agentGraph = useOmniStore((s) => s.agentGraph);
   const agentStatuses = useOmniStore((s) => s.agentStatuses);
 
@@ -177,8 +179,8 @@ export function AgentGraph() {
         >
           ⬡
         </div>
-        <div style={{ fontWeight: 600, color: 'var(--vscode-foreground, #e6e6e6)' }}>Agent mesh idle</div>
-        <div>Start a task — nodes spawn as agents activate and consult each other in real time.</div>
+        <div style={{ fontWeight: 600, color: 'var(--vscode-foreground, #e6e6e6)' }}>{t('panel.agentMeshIdle')}</div>
+        <div>{t('panel.agentMeshStart')}</div>
       </div>
     );
   }

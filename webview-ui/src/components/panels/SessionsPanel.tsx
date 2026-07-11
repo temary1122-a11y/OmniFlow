@@ -1,6 +1,7 @@
 import { Plus, Download, Trash2, History } from 'lucide-react';
 import type { CSSProperties } from 'react';
 import { useOmniStore } from '@/store/omniStore';
+import { useTranslation } from '@/i18n';
 
 /**
  * SessionsPanel
@@ -53,6 +54,7 @@ function InfoRow({ label, value }: { label: string; value: string }) {
 }
 
 export function SessionsPanel() {
+  const { t } = useTranslation();
   const sessionId = useOmniStore((s) => s.sessionId);
   const goal = useOmniStore((s) => s.goal);
   const messages = useOmniStore((s) => s.messages);
@@ -73,29 +75,29 @@ export function SessionsPanel() {
     >
       <div style={headerStyle}>
         <History size={16} style={{ color: ACCENT }} />
-        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>Sessions</span>
+        <span style={{ fontSize: 13, fontWeight: 600, letterSpacing: 0.3 }}>{t('panel.sessions')}</span>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 14 }}>
         <div style={{ marginBottom: 12 }}>
-          <InfoRow label="Session ID" value={sessionId} />
-          <InfoRow label="Goal" value={goal} />
-          <InfoRow label="Messages" value={String(messages.length)} />
-          <InfoRow label="Current phase" value={currentPhase} />
+          <InfoRow label={t('panel.sessionId')} value={sessionId} />
+          <InfoRow label={t('panel.goal')} value={goal} />
+          <InfoRow label={t('panel.messages')} value={String(messages.length)} />
+          <InfoRow label={t('panel.currentPhase')} value={currentPhase} />
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <button type="button" onClick={() => resetSession()} style={btnStyle(true)} aria-label="New session">
+          <button type="button" onClick={() => resetSession()} style={btnStyle(true)} aria-label={t('panel.newSession')}>
             <Plus size={14} />
-            New session
+            {t('panel.newSession')}
           </button>
-          <button type="button" onClick={() => exportSession()} style={btnStyle(false)} aria-label="Export session">
+          <button type="button" onClick={() => exportSession()} style={btnStyle(false)} aria-label={t('panel.exportSession')}>
             <Download size={14} />
-            Export session
+            {t('panel.exportSession')}
           </button>
-          <button type="button" onClick={() => clearMessages()} style={btnStyle(false)} aria-label="Clear chat">
+          <button type="button" onClick={() => clearMessages()} style={btnStyle(false)} aria-label={t('panel.clearChat')}>
             <Trash2 size={14} />
-            Clear chat
+            {t('panel.clearChat')}
           </button>
         </div>
       </div>
