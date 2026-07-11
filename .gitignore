@@ -32,3 +32,5 @@ generated/
 
 # Planning doc accidentally placed inside src/
 src/memory/PHASE-2.3-EPISODIC-MEMORY.md
+.kilo/
+
