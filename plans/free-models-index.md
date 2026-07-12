@@ -4,6 +4,8 @@
 
 | Model | Provider | Price | Context Window | Benchmark Scores (MMLU, GSM-8K, HumanEval, MT-Bench) | Role Suitability |
 |-------|----------|-------|----------------|------------------------------------------------------|------------------|
+| google/gemma-3-4b-it:free | openrouter | Free | 8192 tokens | MMLU: —, GSM-8K: —, HumanEval: —, MT-Bench: — | All roles |
+| meta-llama/llama-3.2-3b-instruct:free | openrouter | Free | 131072 tokens | MMLU: —, GSM-8K: —, HumanEval: —, MT-Bench: — | All roles |
 | tencent/hy3:free | kilo-gateway | Free | 262144 tokens | MMLU: —, GSM-8K: —, HumanEval: —, MT-Bench: — | All roles |
 | stepfun/step-3.7-flash:free | kilo-gateway | Free | 262144 tokens | MMLU: —, GSM-8K: —, HumanEval: —, MT-Bench: — | All roles |
 | nvidia/nemotron-3-ultra-550b-a55b:free | kilo-gateway | Free | 1000000 tokens | MMLU: —, GSM-8K: —, HumanEval: —, MT-Bench: — | Orchestrator, Complex |
