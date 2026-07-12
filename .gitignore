@@ -23,7 +23,6 @@ test-ui.html
 *.log
 
 # Planning & design artifacts (not part of the extension source)
-plans/
 docs/
 
 # Runtime output produced by the extension
